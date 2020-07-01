@@ -4,7 +4,7 @@ import sys
 
 
 class Rover:
-    def __init__(self, p, rov_id, rover_pos):
+    def __init__(self, p, rov_id):
         self.sensor_range = p["obs_rad"]
         self.min_dist = p["min_dist"]
         self.sensor_readings = np.zeros(p["n_inputs"])
@@ -22,25 +22,20 @@ class Rover:
         self.hidden_layer = np.reshape(np.mat(np.zeros(self.n_hnodes)), [self.n_hnodes, 1])
         self.output_layer = np.reshape(np.mat(np.zeros(self.n_outputs)), [self.n_outputs, 1])
 
-        # Rover intiial conditions
-        self.rx_init = rover_pos[0]
-        self.ry_init = rover_pos[1]
-        self.rt_init = rover_pos[2]
+        # Rover position information
+        self.rover_x = 0.0
+        self.rover_y = 0.0
+        self.rover_theta = 0.0
 
-        # Current rover coordinates
-        self.rover_x = rover_pos[0]
-        self.rover_y = rover_pos[1]
-        self.rover_theta = rover_pos[2]
-
-    def reset_rover(self):
+    def reset_rover(self, rover_config):
         """
         Resets the rover to its initial starting conditions (used to reset each training episode)
         :return:
         """
         # Return rover to initial configuration
-        self.rover_x = self.rx_init
-        self.rover_y = self.ry_init
-        self.rover_theta = self.rt_init
+        self.rover_x = rover_config[0]
+        self.rover_y = rover_config[1]
+        self.rover_theta = rover_config[2]
 
         # Reset Neural Network
         self.weights = {}
@@ -84,7 +79,7 @@ class Rover:
         """
         Rover activates scanner to detect other rovers within the environment
         :param rovers: Dictionary containing rover positions
-        :param num_rovers: Parameter designating the number of rovers in the simulation
+        :param n_rovers: Parameter designating the number of rovers in the simulation
         :return: Portion of the state vector created from rover scanner
         """
         rover_state = np.zeros(int(360.0 / self.angle_res))
@@ -125,8 +120,8 @@ class Rover:
     def run_poi_scan(self, poi_info, n_poi):
         """
         Rover queries scanner that detects POIs
-        :param pois: multi-dimensional numpy array containing coordinates and values of POIs
-        :param num_poi: parameter designating the number of POI in the simulation
+        :param poi_info: multi-dimensional numpy array containing coordinates and values of POIs
+        :param n_poi: parameter designating the number of POI in the simulation
         :return: Portion of state-vector constructed from POI scanner
         """
         poi_state = np.zeros(int(360.0 / self.angle_res))
@@ -169,8 +164,8 @@ class Rover:
         Rovers construct a state input vector for the neuro-controller by accessing data from sensors
         :param rovers: Dictionary containing coordinates of rovers
         :param pois: Multi-dimensional numpy array containing POI locations and values
-        :param num_rovers: The number of rovers in the simulation
-        :param num_poi: The number of POIs in the simulation
+        :param n_rovers: The number of rovers in the simulation
+        :param n_poi: The number of POIs in the simulation
         :return:
         """
 
