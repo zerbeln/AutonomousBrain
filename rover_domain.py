@@ -16,7 +16,6 @@ class RoverDomain:
         self.c_req = p["c_req"]
         self.min_dist = p["min_dist"]
         self.obs_radius = p["obs_rad"]
-        self.create_new_world_config = p["new_world_config"]
         self.rover_steps = p["n_steps"]
         self.n_configs = p["n_configs"]
 
@@ -30,6 +29,11 @@ class RoverDomain:
         # User Defined Parameters:
         self.poi_observations = np.zeros(self.n_poi)  # Used for spatial coupling of POIs
 
+    def create_rover_test_config(self):
+        self.rover_configs = np.zeros((1, self.n_rovers, 3))  # [X, Y, Theta]
+        self.init_rover_pos_random_concentrated(0, radius=5.0)
+        self.save_rover_configuration('Rover_Config.csv')
+
     def create_rover_training_configs(self):
         """
         Create n number of world configurations to train the bank of policies
@@ -39,7 +43,7 @@ class RoverDomain:
 
         for config_id in range(self.n_configs):
             self.init_rover_pos_random(config_id)
-        self.save_rover_configuration("rover_policy_training.csv")
+        self.save_rover_configuration("Rover_Training_Configs.csv")
 
     def create_new_poi_config(self):
         """

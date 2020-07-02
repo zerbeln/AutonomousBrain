@@ -2,10 +2,9 @@ import pygame
 import numpy as np
 import time
 import math
-import sys
 import os
 import csv
-sys.path.append('../')
+import pickle
 
 pygame.font.init()  # you have to call this at the start, if you want to use this module
 myfont = pygame.font.SysFont('Comic Sans MS', 30)
@@ -24,38 +23,27 @@ def generate_color_array(num_colors):  # Generates num random colors
     return color_arr
 
 
-def import_rover_paths(p):
-    rover_paths = np.zeros((p["s_runs"], (p["n_steps"]+1), p["n_rovers"], 2))
-    posFile = open('./Output_Data/Rover_Paths.txt', 'r')
-
-    sr = 0
-    rover_id = 0
-    step_id = 0
-    for line in posFile:
-        if line == '\n':
-            continue
-
-        count = 0
-        for coord in line.split('\t'):
-            if (coord != '\n'):
-                if count % 2 == 0:
-                    rover_paths[sr, step_id, rover_id, 0] = float(coord)
-                    count += 1
-                else:
-                    rover_paths[sr, step_id, rover_id, 1] = float(coord)
-                    count += 1
-                    step_id += 1
-                if step_id == (p["n_steps"] + 1):
-                    step_id = 0
-        rover_id += 1
-        if rover_id == p["n_rovers"]:
-            rover_id = 0
-            sr += 1
+def import_rover_paths():
+    """
+    Import rover paths from pickle file
+    :return:
+    """
+    dir_name = 'Output_Data/'
+    file_name = 'Rover_Paths'
+    rover_path_file = os.path.join(dir_name, file_name)
+    infile = open(rover_path_file, 'rb')
+    rover_paths = pickle.load(infile)
+    infile.close()
 
     return rover_paths
 
 
 def import_poi_information(p):
+    """
+    Import POI information from saved configuration files
+    :param p:
+    :return:
+    """
     pois = np.zeros((p["n_poi"], 3))
 
     config_input = []
@@ -73,19 +61,12 @@ def import_poi_information(p):
     return pois
 
 
-def create_output_files(filename, in_vec):
-    dir_name = 'Output_Data/'
-
-    if not os.path.exists(dir_name):  # If directory does not exist, create it
-        os.makedirs(dir_name)
-
-    save_file_name = os.path.join(dir_name, filename)
-    with open(save_file_name, 'a+', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(in_vec)
-
-
 def run_visualizer(p):
+    """
+    Run the visualzier that plots each rover's trajectory in the domain
+    :param p:
+    :return:
+    """
     scale_factor = 20  # Scaling factor for images
     width = -15  # robot icon widths
     x_map = int(p["x_dim"] + 10)  # Slightly larger so POI are not cut off
@@ -99,7 +80,7 @@ def run_visualizer(p):
     pygame.font.init() 
     myfont = pygame.font.SysFont('Comic Sans MS', 30)
 
-    rover_path = import_rover_paths(p)
+    rover_path = import_rover_paths()
     pois = import_poi_information(p)
 
     poi_convergence = [0 for i in range(p["n_poi"] + 1)]
@@ -176,5 +157,3 @@ def run_visualizer(p):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     p["running"] = False
-
-    create_output_files('POI_Choice.csv', poi_convergence)

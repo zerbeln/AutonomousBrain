@@ -19,16 +19,16 @@ def get_parameters(brain_training=0):
     parameters = {}
 
     # Test Parameters
-    parameters["s_runs"] = 1
-    parameters["new_world_config"] = 0  # 1 = Create new environment, 0 = Use existing environment
+    parameters["s_runs"] = 10
     parameters["running"] = 0  # 1 keeps visualizer from closing (use 0 for multiple runs)
+    parameters["train_policies"] = 0  # 1 = train new set, 0 = re-use trained set
 
     # Rover Domain Parameters
     parameters["n_rovers"] = 1
     parameters["n_poi"] = 2
     if brain_training == 0:  # Training individual policies
         parameters["n_steps"] = 30
-        parameters["n_configs"] = 6  # The number of configurations used to train policies
+        parameters["n_configs"] = 10  # The number of configurations used to train policies
     else:
         parameters["n_steps"] = 60  # Training the brain
         parameters["n_configs"] = 1  # The number of configurations used to train policies
@@ -46,8 +46,8 @@ def get_parameters(brain_training=0):
     parameters["n_outputs"] = 2
 
     # Brain Parameters
-    parameters["brain_inputs"] = 8
-    parameters["brain_hnodes"] = 10
+    parameters["brain_inputs"] = 4
+    parameters["brain_hnodes"] = 6
     parameters["brain_outputs"] = 1
     parameters["brain_generations"] = 1000
     parameters["n_policies"] = 2 * parameters["n_poi"]
@@ -78,27 +78,18 @@ def save_reward_history(reward_history, file_name):
         writer.writerow(['Performance'] + reward_history)
 
 
-def save_rover_path(p, rover_path):  # Save path rovers take using best policy found
+def save_rover_path(rover_path):  # Save path rovers take using best policy found
     """
     Records the path each rover takes using best policy from CCEA (used by visualizer)
-    :param p:  parameter dict
     :param rover_path:  trajectory tracker
     :return:
     """
     dir_name = 'Output_Data/'  # Intended directory for output files
 
-    rpath_name = os.path.join(dir_name, 'Rover_Paths.txt')
-
-    rpath = open(rpath_name, 'a')
-    for rov_id in range(p["n_rovers"]):
-        for t in range(p["n_steps"]+1):
-            rpath.write('%f' % rover_path[t, rov_id, 0])
-            rpath.write('\t')
-            rpath.write('%f' % rover_path[t, rov_id, 1])
-            rpath.write('\t')
-        rpath.write('\n')
-    rpath.write('\n')
-    rpath.close()
+    rpath_name = os.path.join(dir_name, 'Rover_Paths')
+    rover_file = open(rpath_name, 'wb')
+    pickle.dump(rover_path, rover_file)
+    rover_file.close()
 
 
 def save_trained_policy(filename, policy):
@@ -133,32 +124,57 @@ def use_saved_policy(filename):
     return policy
 
 
-def test_policies(reward_type):
+def train_policies():
+    """
+    Train set of Rover Control policies for the brain to choose
+    :return: Dictionary of trained policies
+    """
+    print("Training Rover Control Policies")
+    p = get_parameters()
 
-    print("Reward Type: ", reward_type)
+    policies = {}
+    for poi_id in range(p["n_poi"]):
+        weights1 = train_towards_poi_policy(poi_id)
+        policies["Towards{0}".format(poi_id)] = weights1
+        save_trained_policy('TowardsPOI{0}'.format(poi_id), weights1)
+        print("Policy: ", (2*poi_id), " Trained.")
+        weights2 = train_away_from_poi_policy(poi_id)
+        policies["Away{0}".format(poi_id)] = weights2
+        save_trained_policy('AwayFromPOI{0}'.format(poi_id), weights2)
+        print("Policy: ", (2*poi_id + 1), " Trained.")
+
+    return policies
+
+
+def test_policy(policy_id, policy_type):
+    """
+    Test a selected, trained policy in the rover domain
+    :param policy:
+    :return:
+    """
     p = get_parameters(brain_training=1)
-
-    poi_id = 1
-    weights = train_towards_poi_policy(poi_id)
-    # weights = train_away_from_poi_policy(poi_id)
-    # save_trained_policy('NNPolicy', weights)
-    # weights = use_saved_policy('NNPolicy')
-
     rd = RoverDomain(p)
     rd.use_saved_rover_config('Rover_Config.csv')
     rd.use_saved_poi_configuration()
     rov = Rover(p, 0)
 
+    if policy_type == "Towards":
+        chosen_pol = use_saved_policy('TowardsPOI{0}'.format(policy_id))
+    else:
+        chosen_pol = use_saved_policy('AwayFromPOI{0}'.format(policy_id))
+
     rov.reset_rover(rd.rover_configs[0, 0])  # Reset rover to initial conditions
-    rov.get_network_weights(weights)  # Apply best set of weights to network
+    rov.get_network_weights(chosen_pol)  # Apply best set of weights to network
     rd.update_rover_path(rov, 0, -1)
 
+    visualizer_rover_path = np.zeros((p["s_runs"], (p["n_steps"] + 1), p["n_rovers"], 3))
     for step_id in range(p["n_steps"]):
         rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
         rov.step(p["x_dim"], p["y_dim"])
         rd.update_rover_path(rov, 0, step_id)
 
-    save_rover_path(p, rd.rover_path)
+    visualizer_rover_path[0] = rd.rover_path.copy()
+    save_rover_path(visualizer_rover_path)
     run_visualizer(p)
 
 
@@ -172,10 +188,7 @@ def train_away_from_poi_policy(poi_id):
 
     # Create dictionary for each instance of rover and corresponding NN and EA population
     rd = RoverDomain(p)
-    if p["new_world_config"] == 1:
-        rd.create_rover_training_configs()
-    else:
-        rd.use_saved_rover_config('rover_policy_training.csv')
+    rd.use_saved_rover_config('Rover_Training_Configs.csv')
     rd.use_saved_poi_configuration()
     rov = Rover(p, 0)
     ea = Ccea(p, p["n_inputs"], p["n_hnodes"], p["n_outputs"])
@@ -216,11 +229,7 @@ def train_towards_poi_policy(poi_id):
 
     # Create dictionary for each instance of rover and corresponding NN and EA population
     rd = RoverDomain(p)
-    if p["new_world_config"] == 1:
-        rd.create_rover_training_configs()
-    else:
-        rd.use_saved_rover_config('rover_policy_training.csv')
-    #rd.create_new_poi_config()
+    rd.use_saved_rover_config('Rover_Training_Configs.csv')
     rd.use_saved_poi_configuration()
     rov = Rover(p, 0)
     ea = Ccea(p, p["n_inputs"], p["n_hnodes"], p["n_outputs"])
@@ -255,6 +264,7 @@ def pick_policy(brain_output, n_policies, policies):
     """
     Choose a policy from the policy bank based on the brain's output
     :param brain_output: Output from brain decision making NN
+    :param n_policies: The number of policies the brain can choose between
     :param policies: Bank of pre-trained policies to choose from
     :return:
     """
@@ -267,18 +277,20 @@ def pick_policy(brain_output, n_policies, policies):
 
 
 def multi_reward_learning_single(reward_type):
-    print("Reward Type: ", reward_type)
-
     p = get_parameters(brain_training=1)
-    assert (p["new_world_config"] == 0)
 
+    policies = {}
+    if p["train_policies"] == 1:
+        policies = train_policies()
+    else:
+        for poi_id in range(p["n_poi"]):
+            policies['Policy{0}'.format(2*poi_id)] = use_saved_policy('TowardsPOI{0}'.format(poi_id))
+            policies['Policy{0}'.format(2*poi_id + 1)] = use_saved_policy('AwayFromPOI{0}'.format(poi_id))
+
+    print("Training The Brain")
+    visualizer_rover_path = np.zeros((p["s_runs"], (p["n_steps"] + 1), p["n_rovers"], 3))
     for srun in range(p["s_runs"]):  # Perform statistical runs
         print("Run: %i" % srun)
-        # Train bank of agent policies
-        policies = {}
-        for poi_id in range(p["n_poi"]):
-            policies["Policy{0}".format(2*poi_id)] = train_towards_poi_policy(poi_id)
-            policies["Policy{0}".format(2*poi_id+1)] = train_away_from_poi_policy(poi_id)
 
         # Create dictionary for each instance of rover and corresponding NN and EA population
         rd = RoverDomain(p)
@@ -345,7 +357,8 @@ def multi_reward_learning_single(reward_type):
             reward_history.append(global_reward)
 
             if gen == (p["brain_generations"] - 1):  # Save path at end of final generation
-                save_rover_path(p, rd.rover_path)
+                visualizer_rover_path[srun] = rd.rover_path.copy()
+                save_rover_path(visualizer_rover_path)
 
             # Choose new parents and create new offspring population
             ea.down_select()
@@ -363,7 +376,7 @@ def visualizer_only():
     run_visualizer(p)
 
 
-def main(reward_type="Test"):
+def main(reward_type="Visual"):
     """
     reward_type:
     :return:
@@ -372,10 +385,20 @@ def main(reward_type="Test"):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     if reward_type == "Multi":
         multi_reward_learning_single(reward_type)
+    elif reward_type == "Train":
+        policies = train_policies()
     elif reward_type == "Test":
-        test_policies(reward_type)
+        test_policy(1, "Towards")  # [Policy ID, Policy Type]
+    elif reward_type == "Visual":
+        visualizer_only()
+    elif reward_type == "Create_Configs":
+        p = get_parameters()
+        rd = RoverDomain(p)
+        rd.create_rover_training_configs()
+        # rd.create_rover_test_config()
+        # rd.create_new_poi_config()
     else:
         sys.exit('Incorrect Reward Type')
 
 
-main(reward_type="Test")  # Run the program
+main(reward_type="Multi")  # Run the program
