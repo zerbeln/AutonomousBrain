@@ -1,6 +1,6 @@
 from ccea import Ccea
 from reward_functions import calc_global_reward
-from multi_reward import go_away_poi_reward, go_towards_poi_reward
+from multi_reward import go_away_poi_reward, go_towards_poi_reward, avoid_obstacle_reward
 from rover_domain import RoverDomain
 from brain import Brain
 from Visualizer.visualizer import run_visualizer
@@ -19,13 +19,14 @@ def get_parameters(brain_training=0):
     parameters = {}
 
     # Test Parameters
-    parameters["s_runs"] = 10
-    parameters["running"] = 0  # 1 keeps visualizer from closing (use 0 for multiple runs)
+    parameters["s_runs"] = 1
+    parameters["running"] = 1  # 1 keeps visualizer from closing (use 0 for multiple runs)
     parameters["train_policies"] = 0  # 1 = train new set, 0 = re-use trained set
 
     # Rover Domain Parameters
     parameters["n_rovers"] = 1
     parameters["n_poi"] = 2
+    parameters["n_obstacles"] = 1
     if brain_training == 0:  # Training individual policies
         parameters["n_steps"] = 30
         parameters["n_configs"] = 10  # The number of configurations used to train policies
@@ -41,13 +42,13 @@ def get_parameters(brain_training=0):
     parameters["sensor_type"] = 'summed'
 
     # Neural Network Parameters
-    parameters["n_inputs"] = 4
-    parameters["n_hnodes"] = 6
+    parameters["n_inputs"] = 8
+    parameters["n_hnodes"] = 10
     parameters["n_outputs"] = 2
 
     # Brain Parameters
-    parameters["brain_inputs"] = 4
-    parameters["brain_hnodes"] = 6
+    parameters["brain_inputs"] = 8
+    parameters["brain_hnodes"] = 10
     parameters["brain_outputs"] = 1
     parameters["brain_generations"] = 1000
     parameters["n_policies"] = 2 * parameters["n_poi"]
@@ -143,19 +144,27 @@ def train_policies():
         save_trained_policy('AwayFromPOI{0}'.format(poi_id), weights2)
         print("Policy: ", (2*poi_id + 1), " Trained.")
 
+    # Train Obstacle Avoidance Policy
+    weights3 = train_obstacle_avoid_policy()
+    policies["AvoidObstacle"] = weights3
+    save_trained_policy('AvoidObstacle', weights3)
+    print("Obstacle Avoidance Policy Trained")
+
     return policies
 
 
 def test_policy(policy_id, policy_type):
     """
     Test a selected, trained policy in the rover domain
-    :param policy:
+    :param policy_id:
+    :param policy_type:
     :return:
     """
     p = get_parameters(brain_training=1)
     rd = RoverDomain(p)
-    rd.use_saved_rover_config('Rover_Config.csv')
+    rd.use_saved_rover_test_config()
     rd.use_saved_poi_configuration()
+    rd.use_saved_obstacle_config()
     rov = Rover(p, 0)
 
     if policy_type == "Towards":
@@ -169,7 +178,7 @@ def test_policy(policy_id, policy_type):
 
     visualizer_rover_path = np.zeros((p["s_runs"], (p["n_steps"] + 1), p["n_rovers"], 3))
     for step_id in range(p["n_steps"]):
-        rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
+        rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
         rov.step(p["x_dim"], p["y_dim"])
         rd.update_rover_path(rov, 0, step_id)
 
@@ -188,27 +197,29 @@ def train_away_from_poi_policy(poi_id):
 
     # Create dictionary for each instance of rover and corresponding NN and EA population
     rd = RoverDomain(p)
-    rd.use_saved_rover_config('Rover_Training_Configs.csv')
+    rd.use_saved_rover_training_configs()
     rd.use_saved_poi_configuration()
+    rd.use_saved_obstacle_config()
     rov = Rover(p, 0)
     ea = Ccea(p, p["n_inputs"], p["n_hnodes"], p["n_outputs"])
     ea.create_new_population()
 
     for gen in range(p["generations"]):
         ea.reset_fitness()
-        for config_id in range(p["n_configs"]):
-            for policy_id in range(p["pop_size"]):  # Each policy in CCEA is tested in teams
+        for policy_id in range(p["pop_size"]):
+            for config_id in range(p["n_configs"]):
                 rov.reset_rover(rd.rover_configs[config_id, 0])  # Reset rover to initial conditions
                 rov.get_network_weights(ea.population["pop{0}".format(policy_id)])  # Apply network weights from CCEA
                 rd.update_rover_path(rov, 0, -1)  # Record starting position of each rover
 
                 for step_id in range(p["n_steps"]):
-                    rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
+                    rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
                     rov.step(p["x_dim"], p["y_dim"])
                     rd.update_rover_path(rov, 0, step_id)
 
-                # Update fitness of policies using reward information
-                ea.fitness[policy_id] += go_away_poi_reward(poi_id, rd.pois, rov)
+                    # Update fitness of policies using reward information
+                    ea.fitness[policy_id] += go_away_poi_reward(poi_id, rd.pois, rov)
+            ea.fitness[policy_id] /= p["n_configs"]
 
         # Choose new parents and create new offspring population
         ea.down_select()
@@ -229,27 +240,74 @@ def train_towards_poi_policy(poi_id):
 
     # Create dictionary for each instance of rover and corresponding NN and EA population
     rd = RoverDomain(p)
-    rd.use_saved_rover_config('Rover_Training_Configs.csv')
+    rd.use_saved_rover_training_configs()
     rd.use_saved_poi_configuration()
+    rd.use_saved_obstacle_config()
     rov = Rover(p, 0)
     ea = Ccea(p, p["n_inputs"], p["n_hnodes"], p["n_outputs"])
     ea.create_new_population()
 
     for gen in range(p["generations"]):
         ea.reset_fitness()
-        for config_id in range(p["n_configs"]):
-            for policy_id in range(p["pop_size"]):  # Each policy in CCEA is tested in teams
+        for policy_id in range(p["pop_size"]):
+            for config_id in range(p["n_configs"]):
                 rov.reset_rover(rd.rover_configs[config_id, 0])  # Reset rover to initial conditions
                 rov.get_network_weights(ea.population["pop{0}".format(policy_id)])  # Apply network weights from CCEA
                 rd.update_rover_path(rov, 0, -1)  # Record starting position of each rover
 
                 for step_id in range(p["n_steps"]):
-                    rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
+                    rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
                     rov.step(p["x_dim"], p["y_dim"])
                     rd.update_rover_path(rov, 0, step_id)
 
-                # Update fitness of policies using reward information
-                ea.fitness[policy_id] += go_towards_poi_reward(poi_id, rd.pois, rov)
+                    # Update fitness of policies using reward information
+                    ea.fitness[policy_id] += go_towards_poi_reward(poi_id, rd.pois, rov)
+
+            ea.fitness[policy_id] /= p["n_configs"]
+
+        # Choose new parents and create new offspring population
+        ea.down_select()
+
+    best_pol_id = np.argmax(ea.fitness)
+    best_policy = ea.population["pop{0}".format(best_pol_id)]
+
+    return best_policy
+
+
+def train_obstacle_avoid_policy():
+    """
+    Train a NN control policy that avoids obstacles
+    :return:
+    """
+    p = get_parameters()
+
+    # Create dictionary for each instance of rover and corresponding NN and EA population
+    rd = RoverDomain(p)
+    rd.use_saved_rover_training_configs()
+    rd.use_saved_poi_configuration()
+    rd.use_saved_obstacle_config()
+    rov = Rover(p, 0)
+    ea = Ccea(p, p["n_inputs"], p["n_hnodes"], p["n_outputs"])
+    ea.create_new_population()
+
+    for gen in range(p["generations"]):
+        ea.reset_fitness()
+        for policy_id in range(p["pop_size"]):
+            for config_id in range(p["n_configs"]):
+                rov.reset_rover(rd.rover_configs[config_id, 0])  # Reset rover to initial conditions
+                rov.get_network_weights(ea.population["pop{0}".format(policy_id)])  # Apply network weights from CCEA
+                rd.update_rover_path(rov, 0, -1)  # Record starting position of each rover
+
+                for step_id in range(p["n_steps"]):
+                    rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
+                    rov.step(p["x_dim"], p["y_dim"])
+                    rd.update_rover_path(rov, 0, step_id)
+
+                    # Update fitness of policies using reward information
+                    for obs_id in range(p["n_obstacles"]):
+                        ea.fitness[policy_id] += avoid_obstacle_reward(obs_id, rd.obstacles, rov)
+
+            ea.fitness[policy_id] /= p["n_configs"]
 
         # Choose new parents and create new offspring population
         ea.down_select()
@@ -276,7 +334,7 @@ def pick_policy(brain_output, n_policies, policies):
             return rover_policy
 
 
-def multi_reward_learning_single(reward_type):
+def multi_reward_learning_single():
     p = get_parameters(brain_training=1)
 
     policies = {}
@@ -286,6 +344,7 @@ def multi_reward_learning_single(reward_type):
         for poi_id in range(p["n_poi"]):
             policies['Policy{0}'.format(2*poi_id)] = use_saved_policy('TowardsPOI{0}'.format(poi_id))
             policies['Policy{0}'.format(2*poi_id + 1)] = use_saved_policy('AwayFromPOI{0}'.format(poi_id))
+        policies['Policy{0}'.format(p["n_poi"])] = use_saved_policy("AvoidObstacle")
 
     print("Training The Brain")
     visualizer_rover_path = np.zeros((p["s_runs"], (p["n_steps"] + 1), p["n_rovers"], 3))
@@ -294,8 +353,9 @@ def multi_reward_learning_single(reward_type):
 
         # Create dictionary for each instance of rover and corresponding NN and EA population
         rd = RoverDomain(p)
-        rd.use_saved_rover_config('Rover_Config.csv')
+        rd.use_saved_rover_test_config()
         rd.use_saved_poi_configuration()
+        rd.use_saved_obstacle_config()
         br = Brain(p)
         rov = Rover(p, 0)
         ea = Ccea(p, p["brain_inputs"], p["brain_hnodes"], p["brain_outputs"])
@@ -310,13 +370,13 @@ def multi_reward_learning_single(reward_type):
                 rd.update_rover_path(rov, 0, -1)  # Record starting position of each rover
 
                 for step_id in range(p["n_steps"]):
-                    rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
+                    rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
                     state_vector = []
-                    for bracket in range(4):
+                    for bracket in range(8):
                         state_vector.append(rov.sensor_readings[bracket])
-                    for poi_id in range(p["n_poi"]):
-                        state_vector.append(go_towards_poi_reward(poi_id, rd.pois, rov))
-                        state_vector.append(go_away_poi_reward(poi_id, rd.pois, rov))
+                    # for poi_id in range(p["n_poi"]):
+                    #     state_vector.append(go_towards_poi_reward(poi_id, rd.pois, rov))
+                    #     state_vector.append(go_away_poi_reward(poi_id, rd.pois, rov))
 
                     # Pick policy using brain's decision
                     br.get_inputs(state_vector)
@@ -337,13 +397,13 @@ def multi_reward_learning_single(reward_type):
             rd.update_rover_path(rov, 0, -1)
 
             for step_id in range(p["n_steps"]):
-                rov.rover_sensor_scan(rov, rd.pois, p["n_rovers"], p["n_poi"])
+                rov.rover_sensor_scan(rov, rd.pois, rd.obstacles, p["n_rovers"], p["n_poi"], p["n_obstacles"])
                 state_vector = []
-                for bracket in range(4):
+                for bracket in range(8):
                     state_vector.append(rov.sensor_readings[bracket])
-                for poi_id in range(p["n_poi"]):
-                    state_vector.append(go_towards_poi_reward(poi_id, rd.pois, rov))
-                    state_vector.append(go_away_poi_reward(poi_id, rd.pois, rov))
+                # for poi_id in range(p["n_poi"]):
+                #     state_vector.append(go_towards_poi_reward(poi_id, rd.pois, rov))
+                #     state_vector.append(go_away_poi_reward(poi_id, rd.pois, rov))
 
                 # Pick policy using brain's decision
                 br.get_inputs(state_vector)
@@ -384,21 +444,22 @@ def main(reward_type="Visual"):
 
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     if reward_type == "Multi":
-        multi_reward_learning_single(reward_type)
+        multi_reward_learning_single()
     elif reward_type == "Train":
         policies = train_policies()
     elif reward_type == "Test":
         test_policy(1, "Towards")  # [Policy ID, Policy Type]
     elif reward_type == "Visual":
         visualizer_only()
-    elif reward_type == "Create_Configs":
+    elif reward_type == "Configs":
         p = get_parameters()
         rd = RoverDomain(p)
         rd.create_rover_training_configs()
-        # rd.create_rover_test_config()
-        # rd.create_new_poi_config()
+        rd.create_rover_test_config()
+        rd.create_new_poi_config()
+        rd.create_obstacle_configs()
     else:
         sys.exit('Incorrect Reward Type')
 
 
-main(reward_type="Multi")  # Run the program
+main(reward_type="Train")  # Run the program

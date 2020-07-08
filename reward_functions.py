@@ -13,7 +13,7 @@ def calc_global_reward(p, rover_paths, pois):
 
     total_steps = int(p["n_steps"] + 1)  # The +1 is to account for the initial position
     inft = 1000.00
-    global_reward = 0.0
+    global_reward = 0
 
     poi_observed = np.zeros(p["n_poi"])
     poi_observer_distances = np.zeros([p["n_poi"], total_steps])
@@ -119,6 +119,7 @@ def calc_difference_reward(p, rover_paths, pois, global_reward):
         difference_rewards[agent_id] = global_reward - counterfactual_global_reward
 
     return difference_rewards
+
 
 # D++ REWARD ----------------------------------------------------------------------------------------------------------
 def calc_dpp_reward(p, rover_paths, pois, global_reward):

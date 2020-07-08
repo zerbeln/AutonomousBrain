@@ -18,6 +18,7 @@ class RoverDomain:
         self.obs_radius = p["obs_rad"]
         self.rover_steps = p["n_steps"]
         self.n_configs = p["n_configs"]
+        self.n_obstacles = p["n_obstacles"]
 
         # Rover path trace for trajectory-wide global reward computation and vizualization purposes
         self.rover_path = np.zeros(((self.rover_steps + 1), self.n_rovers, 3))
@@ -25,35 +26,60 @@ class RoverDomain:
         # POI position and value vectors
         self.pois = np.zeros((self.n_poi, 3))  # [X, Y, Val]
         self.rover_configs = np.zeros((self.n_configs, self.n_rovers, 3))  # [X, Y, Theta]
+        self.obstacles = np.zeros((self.n_obstacles, 3))  # [X, Y, Radius]
 
         # User Defined Parameters:
         self.poi_observations = np.zeros(self.n_poi)  # Used for spatial coupling of POIs
 
-    def create_rover_test_config(self):
-        self.rover_configs = np.zeros((1, self.n_rovers, 3))  # [X, Y, Theta]
-        self.init_rover_pos_random_concentrated(0, radius=5.0)
-        self.save_rover_configuration('Rover_Config.csv')
-
-    def create_rover_training_configs(self):
+    def step_based_global_reward(self, rover_positions):
         """
-        Create n number of world configurations to train the bank of policies
+        Calculates the global reward at each time step
+        :param rover_positions:
         :return:
         """
-        self.rover_configs = np.zeros((self.n_configs, self.n_rovers, 3))  # [X, Y, Theta]
 
-        for config_id in range(self.n_configs):
-            self.init_rover_pos_random(config_id)
-        self.save_rover_configuration("Rover_Training_Configs.csv")
+        inft = 1000.00
+        global_reward = -1.0  # Step cost
 
-    def create_new_poi_config(self):
-        """
-        Set POI positions and POI values, clear the rover path tracker
-        :return: none
-        """
-        self.pois = np.zeros((self.n_poi, 3))
-        self.init_poi_pos_four_corners()
-        self.init_poi_vals_random()
-        self.save_poi_configuration()
+        poi_observed = np.zeros(self.n_poi)
+        poi_observer_distances = np.zeros(self.n_poi)
+
+        for poi_id in range(self.n_poi):
+            rover_distances = np.zeros(self.n_rovers)
+            observer_count = 0
+
+            for agent_id in range(self.n_rovers):
+                # Calculate distance between agent and POI
+                x_distance = self.pois[poi_id, 0] - rover_positions[agent_id, 0]
+                y_distance = self.pois[poi_id, 1] - rover_positions[agent_id, 1]
+                distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
+
+                if distance < self.min_dist:
+                    distance = self.min_dist
+
+                rover_distances[agent_id] = distance
+
+                # Check if agent observes poi and update observer count if true
+                if distance < self.obs_radius:
+                    observer_count += 1
+
+            # Update global reward if POI is observed
+            if observer_count >= self.c_req:
+                poi_observed[poi_id] = 1
+                summed_observer_distances = 0.0
+                for observer in range(self.c_req):  # Sum distances of closest observers
+                    summed_observer_distances += min(rover_distances)
+                    od_index = np.argmin(rover_distances)
+                    rover_distances[od_index] = inft
+                poi_observer_distances[poi_id] = summed_observer_distances
+            else:
+                poi_observer_distances[poi_id] = inft
+
+        for poi_id in range(self.n_poi):
+            if poi_observed[poi_id] == 1:
+                global_reward += self.pois[poi_id, 2] / (min(poi_observer_distances[poi_id]) / self.c_req)
+
+        return global_reward
 
     def clear_rover_path(self):
         """
@@ -65,7 +91,7 @@ class RoverDomain:
     def update_rover_path(self, rover, rover_id, step_id):
         """
         Update the array tracking the path of each rover
-        :param rover:  Dictionary containing instances of rovers
+        :param rover: instance of a rover
         :param rover_id: identifier for an individual rover
         :param step_id: Current time step for the simulation
         :return:
@@ -75,13 +101,53 @@ class RoverDomain:
         self.rover_path[step_id+1, rover_id, 2] = rover.rover_theta
 
     # ROVER POSITION FUNCTIONS ----------------------------------------------------------------------------------------
-    def use_saved_rover_config(self, file_name):
+    def create_rover_test_config(self):
+        """
+        Creates the rover starting configurations for testing rovers policies
+        :return:
+        """
+        self.rover_configs = np.zeros((1, self.n_rovers, 3))  # [X, Y, Theta]
+        self.init_rover_pos_random_concentrated(0, radius=5.0)
+        self.save_rover_test_config()
+
+    def create_rover_training_configs(self):
+        """
+        Create n number of world configurations to train the bank of policies
+        :return:
+        """
+        self.rover_configs = np.zeros((self.n_configs, self.n_rovers, 3))  # [X, Y, Theta]
+
+        for config_id in range(self.n_configs):
+            self.init_rover_pos_random(config_id)
+        self.save_rover_training_configs()
+
+    def use_saved_rover_test_config(self):
         """
         Use a stored initial configuration from a CSV file
         :return:
         """
         dir_name = 'Output_Data/'  # Intended directory for output files
-        rov_file_name = os.path.join(dir_name, file_name)
+        rov_file_name = os.path.join(dir_name, 'Rover_Config.csv')
+        config_input = []
+        with open(rov_file_name) as csvfile:
+            csv_reader = csv.reader(csvfile, delimiter=',')
+
+            for row in csv_reader:
+                config_input.append(row)
+
+        # Assign values to variables that track the rover's initial conditions
+        for rov_id in range(self.n_rovers):
+            self.rover_configs[0, rov_id, 0] = float(config_input[rov_id][0])
+            self.rover_configs[0, rov_id, 1] = float(config_input[rov_id][1])
+            self.rover_configs[0, rov_id, 2] = float(config_input[rov_id][2])
+
+    def use_saved_rover_training_configs(self):
+        """
+        Use stored rover training configurations (stored in a CSV file)
+        :return:
+        """
+        dir_name = 'Output_Data/'  # Intended directory for output files
+        rov_file_name = os.path.join(dir_name, 'Rover_Training_Configs.csv')
         config_input = []
         with open(rov_file_name) as csvfile:
             csv_reader = csv.reader(csvfile, delimiter=',')
@@ -96,17 +162,17 @@ class RoverDomain:
                 self.rover_configs[con_id, rov_id, 1] = float(config_input[rov_id][1])
                 self.rover_configs[con_id, rov_id, 2] = float(config_input[rov_id][2])
 
-    def save_rover_configuration(self, file_name):
+    def save_rover_training_configs(self):
         """
         Saves rover positions to a csv file in a folder called Output_Data
-        :Output: CSV file containing rover starting positions
+        :Output: CSV file containing rover training configurations
         """
         dir_name = 'Output_Data/'  # Intended directory for output files
 
         if not os.path.exists(dir_name):  # If Data directory does not exist, create it
             os.makedirs(dir_name)
 
-        pfile_name = os.path.join(dir_name, file_name)
+        pfile_name = os.path.join(dir_name, 'Rover_Training_Configs.csv')
 
         row = np.zeros(3)
         with open(pfile_name, 'a+', newline='') as csvfile:
@@ -118,11 +184,31 @@ class RoverDomain:
                     row[2] = self.rover_configs[con_id, rov_id, 2]
                     writer.writerow(row[:])
 
+    def save_rover_test_config(self):
+        """
+        Saves rover positions to a csv file in a folder called Output_Data
+        :Output: CSV file containing rover starting positions
+        """
+        dir_name = 'Output_Data/'  # Intended directory for output files
+
+        if not os.path.exists(dir_name):  # If Data directory does not exist, create it
+            os.makedirs(dir_name)
+
+        pfile_name = os.path.join(dir_name, 'Rover_Config.csv')
+
+        row = np.zeros(3)
+        with open(pfile_name, 'a+', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            for rov_id in range(self.n_rovers):
+                row[0] = self.rover_configs[0, rov_id, 0]
+                row[1] = self.rover_configs[0, rov_id, 1]
+                row[2] = self.rover_configs[0, rov_id, 2]
+                writer.writerow(row[:])
+
     def init_rover_pos_random(self, con_id):  # Randomly set rovers on map
         """
         Rovers given random starting positions and orientations
-        :param x_lim: Outter x-limit of the environment
-        :param y_lim: Outter y-limit of the environment
+        :param con_id: Configuration identifier number
         :return:
         """
         for rov_id in range(self.n_rovers):
@@ -157,9 +243,19 @@ class RoverDomain:
             self.rover_configs[con_id, rov_id, 2] = random.uniform(0.0, 360.0)
 
     # POI POSITION FUNCTIONS ------------------------------------------------------------------------------------------
+    def create_new_poi_config(self):
+        """
+        Set POI positions and POI values, clear the rover path tracker
+        :return: none
+        """
+        self.pois = np.zeros((self.n_poi, 3))
+        self.init_poi_pos_two_poi()
+        self.init_poi_vals_random()
+        self.save_poi_configuration()
+
     def save_poi_configuration(self):
         """
-        Saves world configuration to a csv file in a folder called Output_Data
+        Saves POI configuration to a csv file in a folder called Output_Data
         :Output: One CSV file containing POI postions and POI values
         """
         dir_name = 'Output_Data/'  # Intended directory for output files
@@ -176,7 +272,7 @@ class RoverDomain:
 
     def use_saved_poi_configuration(self):
         """
-        Re-use world configuration stored in a CSV file in folder called Output_Data
+        Re-use POI configuration stored in a CSV file in folder called Output_Data
         :return:
         """
         config_input = []
@@ -247,8 +343,10 @@ class RoverDomain:
         """
         assert(self.n_poi == 2)
 
-        self.pois[0, 0] = 1.0; self.pois[0, 1] = self.world_y/2.0
-        self.pois[1, 0] = (self.world_x-2.0); self.pois[1, 1] = self.world_y/2.0
+        self.pois[0, 0] = 1.0
+        self.pois[0, 1] = self.world_y/2.0
+        self.pois[1, 0] = (self.world_x-2.0)
+        self.pois[1, 1] = self.world_y/2.0
 
     def init_poi_pos_four_corners(self):  # Statically set 4 POI (one in each corner)
         """
@@ -257,12 +355,23 @@ class RoverDomain:
         """
         assert(self.n_poi == 4)  # There must only be 4 POI for this initialization
 
-        self.pois[0, 0] = 2.0; self.pois[0, 1] = 2.0  # Bottom left
-        self.pois[1, 0] = 2.0; self.pois[1, 1] = (self.world_y - 2.0)  # Top left
-        self.pois[2, 0] = (self.world_x - 2.0); self.pois[2, 1] = 2.0  # Bottom right
-        self.pois[3, 0] = (self.world_x - 2.0); self.pois[3, 1] = (self.world_y - 2.0)  # Top right
+        # Bottom left
+        self.pois[0, 0] = 2.0
+        self.pois[0, 1] = 2.0
 
-    # POI VALUE FUNCTIONS -----------------------------------------------------------------------------------
+        # Top left
+        self.pois[1, 0] = 2.0
+        self.pois[1, 1] = (self.world_y - 2.0)
+
+        # Bottom right
+        self.pois[2, 0] = (self.world_x - 2.0)
+        self.pois[2, 1] = 2.0
+
+        # Top right
+        self.pois[3, 0] = (self.world_x - 2.0)
+        self.pois[3, 1] = (self.world_y - 2.0)
+
+    # POI VALUE FUNCTIONS --------------------------------------------------------------------------------------------
     def init_poi_vals_random(self):
         """
         POI values randomly assigned 1-10
@@ -286,3 +395,56 @@ class RoverDomain:
         """
         for poi_id in range(self.n_poi):
             self.pois[poi_id, 2] = 1.0
+
+    # OBSTACLE FUNCTIONS ---------------------------------------------------------------------------------------------
+    def create_obstacle_configs(self):
+        """
+        Create new obstacle configurations
+        :return:
+        """
+        self.random_obstacles()
+        self.save_obstacle_config()
+
+    def use_saved_obstacle_config(self):
+        """
+        Re-use obstacle configuration stored in a CSV file in folder called Output_Data
+        :return:
+        """
+        config_input = []
+        with open('Output_Data/Obs_Config.csv') as csvfile:
+            csv_reader = csv.reader(csvfile, delimiter=',')
+
+            for row in csv_reader:
+                config_input.append(row)
+
+        for obs_id in range(self.n_obstacles):
+            self.obstacles[obs_id, 0] = float(config_input[obs_id][0])
+            self.obstacles[obs_id, 1] = float(config_input[obs_id][1])
+            self.obstacles[obs_id, 2] = float(config_input[obs_id][2])
+
+    def save_obstacle_config(self):
+        """
+        Saves obstacle configuration to a csv file in a folder called Output_Data
+        :Output: One CSV file containing Obstacle configurations
+        """
+        dir_name = 'Output_Data/'  # Intended directory for output files
+
+        if not os.path.exists(dir_name):  # If Data directory does not exist, create it
+            os.makedirs(dir_name)
+
+        pfile_name = os.path.join(dir_name, 'Obs_Config.csv')
+
+        with open(pfile_name, 'a+', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            for obs_id in range(self.n_obstacles):
+                writer.writerow(self.obstacles[obs_id, :])
+
+    def random_obstacles(self):
+        """
+        Create obstacles in random positions that the rover must avoid
+        :return:
+        """
+        for obs_id in range(self.n_obstacles):
+            self.obstacles[obs_id, 0] = random.uniform(0.0, self.world_x-1.0)
+            self.obstacles[obs_id, 1] = random.uniform(0.0, self.world_y-1.0)
+            self.obstacles[obs_id, 2] = random.randint(1, 5)

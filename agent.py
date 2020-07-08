@@ -159,7 +159,49 @@ class Rover:
 
         return poi_state
 
-    def rover_sensor_scan(self, rovers, pois, n_rovers, n_poi):
+    def run_obstacle_scan(self, obstacles, n_obstacles):
+        """
+        Rover queries scanner that detects POIs
+        :param obstacles: multi-dimensional numpy array containing coordinates and values of obstacles
+        :param n_obstacles: parameter designating the number of obstacles in the simulation
+        :return: Portion of state-vector constructed from POI scanner
+        """
+        obstacle_state = np.zeros(int(360.0 / self.angle_res))
+        temp_obs_dist_list = [[] for _ in range(int(360.0 / self.angle_res))]
+
+        # Log POI distances into brackets
+        for obs_id in range(n_obstacles):
+            obs_x = obstacles[obs_id, 0]
+            obs_y = obstacles[obs_id, 1]
+            obs_value = obstacles[obs_id, 2]
+
+            angle, dist = self.get_angle_dist(self.rover_x, self.rover_y, obs_x, obs_y)
+
+            # Clip distance to not overwhelm activation function in NN
+            if dist < self.min_dist:
+                dist = self.min_dist
+
+            bracket = int(angle / self.angle_res)
+            temp_obs_dist_list[bracket].append(obs_value / dist)
+
+        # Encode POI information into the state vector
+        for bracket in range(int(360 / self.angle_res)):
+            num_poi_bracket = len(temp_obs_dist_list[bracket])  # Number of POIs in bracket
+            if num_poi_bracket > 0:
+                if self.sensor_type == 'density':
+                    obstacle_state[bracket] = sum(temp_obs_dist_list[bracket]) / num_poi_bracket  # Density Sensor
+                elif self.sensor_type == 'summed':
+                    obstacle_state[bracket] = sum(temp_obs_dist_list[bracket])  # Summed Distance Sensor
+                elif self.sensor_type == 'closest':
+                    obstacle_state[bracket] = max(temp_obs_dist_list[bracket])  # Closest Sensor
+                else:
+                    sys.exit('Incorrect sensor model')
+            else:
+                obstacle_state[bracket] = -1.0
+
+        return obstacle_state
+
+    def rover_sensor_scan(self, rovers, pois, obstacles, n_rovers, n_poi, n_obstacles):
         """
         Rovers construct a state input vector for the neuro-controller by accessing data from sensors
         :param rovers: Dictionary containing coordinates of rovers
@@ -170,10 +212,12 @@ class Rover:
         """
 
         poi_state = self.run_poi_scan(pois, n_poi)
-        rover_state = self.run_rover_scan(rovers, n_rovers)
+        # rover_state = self.run_rover_scan(rovers, n_rovers)
+        obstacle_state = self.run_obstacle_scan(obstacles, n_obstacles)
 
         for bracket in range(4):
-            self.sensor_readings[bracket] = poi_state[bracket]
+            self.sensor_readings[2*bracket] = poi_state[bracket]
+            self.sensor_readings[2*bracket+1] = obstacle_state[bracket]
             # self.sensor_readings[bracket + 4] = rover_state[bracket]
 
     def get_angle_dist(self, rovx, rovy, x, y):
