@@ -2,7 +2,7 @@ import numpy as np
 import math
 
 # GLOBAL REWARD -------------------------------------------------------------------------------------------------------
-def calc_global_reward(p, rover_paths, pois):
+def calc_global_reward(p, rover_paths, pois, obstacles, rov_id=0):
     """
     Calculate the global reward for the entire rover trajectory
     :param p: instance of parameters class being passed from main
@@ -16,43 +16,39 @@ def calc_global_reward(p, rover_paths, pois):
     global_reward = 0
 
     poi_observed = np.zeros(p["n_poi"])
-    poi_observer_distances = np.zeros([p["n_poi"], total_steps])
+    rover_distances = np.zeros(total_steps)
 
     for poi_id in range(p["n_poi"]):
-        for step_index in range(total_steps):
-            observer_count = 0
-            rover_distances = np.zeros(p["n_rovers"])
+        for step_id in range(total_steps):
+            # Calculate distance between agent and POI
+            x_distance = pois[poi_id, 0] - rover_paths[step_id, 0]
+            y_distance = pois[poi_id, 1] - rover_paths[step_id, 1]
+            distance = math.sqrt((x_distance**2) + (y_distance**2))
 
-            for agent_id in range(p["n_rovers"]):
-                # Calculate distance between agent and POI
-                x_distance = pois[poi_id, 0] - rover_paths[step_index, agent_id, 0]
-                y_distance = pois[poi_id, 1] - rover_paths[step_index, agent_id, 1]
-                distance = math.sqrt((x_distance**2) + (y_distance**2))
+            if distance < p["min_dist"]:
+                distance = p["min_dist"]
 
-                if distance < p["min_dist"]:
-                    distance = p["min_dist"]
+            rover_distances[step_id] = distance
 
-                rover_distances[agent_id] = distance
-
-                # Check if agent observes poi and update observer count if true
-                if distance < p["obs_rad"]:
-                    observer_count += 1
-
-            # Update global reward if POI is observed
-            if observer_count >= p["c_req"]:
+            # Check if agent observes poi and update observer count if true
+            if distance < p["obs_rad"]:
                 poi_observed[poi_id] = 1
-                summed_observer_distances = 0.0
-                for observer in range(p["c_req"]):  # Sum distances of closest observers
-                    summed_observer_distances += min(rover_distances)
-                    od_index = np.argmin(rover_distances)
-                    rover_distances[od_index] = inft
-                poi_observer_distances[poi_id, step_index] = summed_observer_distances
-            else:
-                poi_observer_distances[poi_id, step_index] = inft
 
-    for poi_id in range(p["n_poi"]):
         if poi_observed[poi_id] == 1:
-            global_reward += pois[poi_id, 2] / (min(poi_observer_distances[poi_id])/p["c_req"])
+            global_reward += pois[poi_id, 2] / min(rover_distances)
+
+    obstacles_hit = np.zeros(p["n_obstacles"])
+    for obs_id in range(p["n_obstacles"]):
+        for step_id in range(total_steps):
+            x_distance = obstacles[obs_id, 0] - rover_paths[step_id, 0]
+            y_distance = obstacles[obs_id, 1] - rover_paths[step_id, 1]
+            distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
+
+            if distance < obstacles[obs_id, 2]:
+                obstacles_hit[obs_id] = 1
+
+        if obstacles_hit[obs_id] == 1:
+            global_reward -= 100
 
     return global_reward
 

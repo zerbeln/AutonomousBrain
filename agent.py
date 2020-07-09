@@ -201,7 +201,7 @@ class Rover:
 
         return obstacle_state
 
-    def rover_sensor_scan(self, rovers, pois, obstacles, n_rovers, n_poi, n_obstacles):
+    def rover_sensor_scan(self, pois, obstacles, n_poi, n_obstacles):
         """
         Rovers construct a state input vector for the neuro-controller by accessing data from sensors
         :param rovers: Dictionary containing coordinates of rovers
@@ -212,13 +212,11 @@ class Rover:
         """
 
         poi_state = self.run_poi_scan(pois, n_poi)
-        # rover_state = self.run_rover_scan(rovers, n_rovers)
         obstacle_state = self.run_obstacle_scan(obstacles, n_obstacles)
 
         for bracket in range(4):
             self.sensor_readings[2*bracket] = poi_state[bracket]
             self.sensor_readings[2*bracket+1] = obstacle_state[bracket]
-            # self.sensor_readings[bracket + 4] = rover_state[bracket]
 
     def get_angle_dist(self, rovx, rovy, x, y):
         """

@@ -61,6 +61,29 @@ def import_poi_information(p):
     return pois
 
 
+def import_obstacle_information(p):
+    """
+    Import obstacle information from saved config files
+    :param p:
+    :return:
+    """
+    obstacles = np.zeros((p["n_obstacles"], 3))
+
+    config_input = []
+    with open('./Output_Data/Obs_Config.csv') as csvfile:
+        csv_reader = csv.reader(csvfile, delimiter=',')
+
+        for row in csv_reader:
+            config_input.append(row)
+
+    for obs_id in range(p["n_obstacles"]):
+        obstacles[obs_id, 0] = float(config_input[obs_id][0])
+        obstacles[obs_id, 1] = float(config_input[obs_id][1])
+        obstacles[obs_id, 2] = float(config_input[obs_id][2])
+
+    return obstacles
+
+
 def run_visualizer(p):
     """
     Run the visualzier that plots each rover's trajectory in the domain
@@ -76,31 +99,33 @@ def run_visualizer(p):
     pygame.display.set_caption('Rover Domain')
     robot_image = pygame.image.load('./Visualizer/robot.png')
     background = pygame.image.load('./Visualizer/background.png')
-    color_array = generate_color_array(p["n_rovers"])
+    color_array = generate_color_array(1)
     pygame.font.init() 
     myfont = pygame.font.SysFont('Comic Sans MS', 30)
 
     rover_path = import_rover_paths()
     pois = import_poi_information(p)
+    obstacles = import_obstacle_information(p)
 
     poi_convergence = [0 for i in range(p["n_poi"] + 1)]
     for srun in range(p["s_runs"]):
         game_display = pygame.display.set_mode((x_map * scale_factor, y_map * scale_factor))
         poi_status = [False for _ in range(p["n_poi"])]
         for tstep in range(p["n_steps"]):
+
+            # Draw POI and calculate POI observations
             draw(game_display, background, 0, 0)
             for poi_id in range(p["n_poi"]):  # Draw POI and POI values
                 poi_x = int(pois[poi_id, 0] * scale_factor) + image_adjust
                 poi_y = int(pois[poi_id, 1] * scale_factor) + image_adjust
 
                 observer_count = 0
-                for rover_id in range(p["n_rovers"]):
-                    x_dist = pois[poi_id, 0] - rover_path[srun, tstep, rover_id, 0]
-                    y_dist = pois[poi_id, 1] - rover_path[srun, tstep, rover_id, 1]
-                    dist = math.sqrt((x_dist**2) + (y_dist**2))
+                x_dist = pois[poi_id, 0] - rover_path[srun, tstep, 0]
+                y_dist = pois[poi_id, 1] - rover_path[srun, tstep, 1]
+                dist = math.sqrt((x_dist**2) + (y_dist**2))
 
-                    if dist <= p["obs_rad"]:
-                        observer_count += 1
+                if dist <= p["obs_rad"]:
+                    observer_count += 1
 
                 if observer_count >= p["c_req"]:
                     poi_status[poi_id] = True
@@ -116,24 +141,32 @@ def run_visualizer(p):
                 target_y = int(pois[poi_id, 1]*scale_factor) + image_adjust
                 draw(game_display, textsurface, target_x, target_y)
 
-            for rov_id in range(p["n_rovers"]):  # Draw all rovers and their trajectories
-                rover_x = int(rover_path[srun, tstep, rov_id, 0]*scale_factor) + width + image_adjust
-                rover_y = int(rover_path[srun, tstep, rov_id, 1]*scale_factor) + width + image_adjust
-                draw(game_display, robot_image, rover_x, rover_y)
+            # Draw Obstacle
+            for obs_id in range(p["n_obstacles"]):
+                obs_x = int(obstacles[obs_id, 0] * scale_factor) + image_adjust
+                obs_y = int(obstacles[obs_id, 1] * scale_factor) + image_adjust
+                obs_zone = int(obstacles[obs_id, 2] * scale_factor)
+                pygame.draw.circle(game_display, (0, 0, 0), (obs_x, obs_y), 10)
+                pygame.draw.circle(game_display, (0, 0, 0), (obs_x, obs_y), obs_zone, 1)
 
-                if tstep != 0:  # start drawing trails from timestep 1.
-                    for timestep in range(1, tstep):  # draw the trajectory lines
-                        line_color = tuple(color_array[rov_id])
-                        start_x = int(rover_path[srun, (timestep-1), rov_id, 0]*scale_factor) + image_adjust
-                        start_y = int(rover_path[srun, (timestep-1), rov_id, 1]*scale_factor) + image_adjust
-                        end_x = int(rover_path[srun, timestep, rov_id, 0]*scale_factor) + image_adjust
-                        end_y = int(rover_path[srun, timestep, rov_id, 1]*scale_factor) + image_adjust
-                        line_width = 3
-                        pygame.draw.line(game_display, line_color, (start_x, start_y), (end_x, end_y), line_width)
-                        origin_x = int(rover_path[srun, timestep, rov_id, 0]*scale_factor) + image_adjust
-                        origin_y = int(rover_path[srun, timestep, rov_id, 1]*scale_factor) + image_adjust
-                        circle_rad = 3
-                        pygame.draw.circle(game_display, line_color, (origin_x, origin_y), circle_rad)
+            # Draw Rovers
+            rover_x = int(rover_path[srun, tstep, 0]*scale_factor) + width + image_adjust
+            rover_y = int(rover_path[srun, tstep, 1]*scale_factor) + width + image_adjust
+            draw(game_display, robot_image, rover_x, rover_y)
+
+            if tstep != 0:  # start drawing trails from timestep 1.
+                for timestep in range(1, tstep):  # draw the trajectory lines
+                    line_color = tuple(color_array[0])
+                    start_x = int(rover_path[srun, (timestep-1), 0]*scale_factor) + image_adjust
+                    start_y = int(rover_path[srun, (timestep-1), 1]*scale_factor) + image_adjust
+                    end_x = int(rover_path[srun, timestep, 0]*scale_factor) + image_adjust
+                    end_y = int(rover_path[srun, timestep, 1]*scale_factor) + image_adjust
+                    line_width = 3
+                    pygame.draw.line(game_display, line_color, (start_x, start_y), (end_x, end_y), line_width)
+                    origin_x = int(rover_path[srun, timestep, 0]*scale_factor) + image_adjust
+                    origin_y = int(rover_path[srun, timestep, 1]*scale_factor) + image_adjust
+                    circle_rad = 3
+                    pygame.draw.circle(game_display, line_color, (origin_x, origin_y), circle_rad)
 
             pygame.display.update()
             time.sleep(0.1)

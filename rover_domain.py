@@ -12,7 +12,6 @@ class RoverDomain:
         self.world_x = p["x_dim"]
         self.world_y = p["y_dim"]
         self.n_poi = p["n_poi"]
-        self.n_rovers = p["n_rovers"]
         self.c_req = p["c_req"]
         self.min_dist = p["min_dist"]
         self.obs_radius = p["obs_rad"]
@@ -21,63 +20,45 @@ class RoverDomain:
         self.n_obstacles = p["n_obstacles"]
 
         # Rover path trace for trajectory-wide global reward computation and vizualization purposes
-        self.rover_path = np.zeros(((self.rover_steps + 1), self.n_rovers, 3))
+        self.rover_path = np.zeros(((self.rover_steps + 1), 3))
 
         # POI position and value vectors
         self.pois = np.zeros((self.n_poi, 3))  # [X, Y, Val]
-        self.rover_configs = np.zeros((self.n_configs, self.n_rovers, 3))  # [X, Y, Theta]
+        self.rover_configs = np.zeros((self.n_configs, 3))  # [X, Y, Theta]
         self.obstacles = np.zeros((self.n_obstacles, 3))  # [X, Y, Radius]
 
         # User Defined Parameters:
         self.poi_observations = np.zeros(self.n_poi)  # Used for spatial coupling of POIs
 
-    def step_based_global_reward(self, rover_positions):
+    def step_based_global_reward(self, rov):
         """
         Calculates the global reward at each time step
         :param rover_positions:
         :return:
         """
 
-        inft = 1000.00
         global_reward = -1.0  # Step cost
 
-        poi_observed = np.zeros(self.n_poi)
-        poi_observer_distances = np.zeros(self.n_poi)
-
         for poi_id in range(self.n_poi):
-            rover_distances = np.zeros(self.n_rovers)
-            observer_count = 0
+            # Calculate distance between agent and POI
+            x_distance = self.pois[poi_id, 0] - rov.rover_x
+            y_distance = self.pois[poi_id, 1] - rov.rover_y
+            distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
 
-            for agent_id in range(self.n_rovers):
-                # Calculate distance between agent and POI
-                x_distance = self.pois[poi_id, 0] - rover_positions[agent_id, 0]
-                y_distance = self.pois[poi_id, 1] - rover_positions[agent_id, 1]
-                distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
+            if distance < self.min_dist:
+                distance = self.min_dist
 
-                if distance < self.min_dist:
-                    distance = self.min_dist
+            # Check if agent observes poi and update observer count if true
+            if distance < self.obs_radius:
+                global_reward += self.pois[poi_id, 2]/distance
 
-                rover_distances[agent_id] = distance
+        for obs_id in range(self.n_obstacles):
+            x_distance = self.obstacles[obs_id, 0] - rov.rover_x
+            y_distance = self.obstacles[obs_id, 1] - rov.rover_y
+            distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
 
-                # Check if agent observes poi and update observer count if true
-                if distance < self.obs_radius:
-                    observer_count += 1
-
-            # Update global reward if POI is observed
-            if observer_count >= self.c_req:
-                poi_observed[poi_id] = 1
-                summed_observer_distances = 0.0
-                for observer in range(self.c_req):  # Sum distances of closest observers
-                    summed_observer_distances += min(rover_distances)
-                    od_index = np.argmin(rover_distances)
-                    rover_distances[od_index] = inft
-                poi_observer_distances[poi_id] = summed_observer_distances
-            else:
-                poi_observer_distances[poi_id] = inft
-
-        for poi_id in range(self.n_poi):
-            if poi_observed[poi_id] == 1:
-                global_reward += self.pois[poi_id, 2] / (min(poi_observer_distances[poi_id]) / self.c_req)
+            if distance < self.obstacles[obs_id, 2]:
+                global_reward -= 100.0
 
         return global_reward
 
@@ -86,9 +67,9 @@ class RoverDomain:
         Resets the rover path tracker
         :return:
         """
-        self.rover_path = np.zeros(((self.rover_steps + 1), self.n_rovers, 3))  # Tracks rover trajectories
+        self.rover_path = np.zeros(((self.rover_steps + 1), 3))  # Tracks rover trajectories
 
-    def update_rover_path(self, rover, rover_id, step_id):
+    def update_rover_path(self, rover, step_id):
         """
         Update the array tracking the path of each rover
         :param rover: instance of a rover
@@ -96,9 +77,9 @@ class RoverDomain:
         :param step_id: Current time step for the simulation
         :return:
         """
-        self.rover_path[step_id+1, rover_id, 0] = rover.rover_x
-        self.rover_path[step_id+1, rover_id, 1] = rover.rover_y
-        self.rover_path[step_id+1, rover_id, 2] = rover.rover_theta
+        self.rover_path[step_id+1, 0] = rover.rover_x
+        self.rover_path[step_id+1, 1] = rover.rover_y
+        self.rover_path[step_id+1, 2] = rover.rover_theta
 
     # ROVER POSITION FUNCTIONS ----------------------------------------------------------------------------------------
     def create_rover_test_config(self):
@@ -106,8 +87,8 @@ class RoverDomain:
         Creates the rover starting configurations for testing rovers policies
         :return:
         """
-        self.rover_configs = np.zeros((1, self.n_rovers, 3))  # [X, Y, Theta]
-        self.init_rover_pos_random_concentrated(0, radius=5.0)
+        self.rover_configs = np.zeros((1, 3))  # [X, Y, Theta]
+        self.init_rover_pos_random_concentrated(0)
         self.save_rover_test_config()
 
     def create_rover_training_configs(self):
@@ -115,10 +96,10 @@ class RoverDomain:
         Create n number of world configurations to train the bank of policies
         :return:
         """
-        self.rover_configs = np.zeros((self.n_configs, self.n_rovers, 3))  # [X, Y, Theta]
+        self.rover_configs = np.zeros((self.n_configs, 3))  # [X, Y, Theta]
 
         for config_id in range(self.n_configs):
-            self.init_rover_pos_random(config_id)
+            self.init_rover_pos_random_concentrated(config_id)
         self.save_rover_training_configs()
 
     def use_saved_rover_test_config(self):
@@ -136,10 +117,9 @@ class RoverDomain:
                 config_input.append(row)
 
         # Assign values to variables that track the rover's initial conditions
-        for rov_id in range(self.n_rovers):
-            self.rover_configs[0, rov_id, 0] = float(config_input[rov_id][0])
-            self.rover_configs[0, rov_id, 1] = float(config_input[rov_id][1])
-            self.rover_configs[0, rov_id, 2] = float(config_input[rov_id][2])
+        self.rover_configs[0, 0] = float(config_input[0][0])
+        self.rover_configs[0, 1] = float(config_input[0][1])
+        self.rover_configs[0, 2] = float(config_input[0][2])
 
     def use_saved_rover_training_configs(self):
         """
@@ -157,10 +137,9 @@ class RoverDomain:
 
         # Assign values to variables that track the rover's initial conditions
         for con_id in range(self.n_configs):
-            for rov_id in range(self.n_rovers):
-                self.rover_configs[con_id, rov_id, 0] = float(config_input[rov_id][0])
-                self.rover_configs[con_id, rov_id, 1] = float(config_input[rov_id][1])
-                self.rover_configs[con_id, rov_id, 2] = float(config_input[rov_id][2])
+            self.rover_configs[con_id, 0] = float(config_input[con_id][0])
+            self.rover_configs[con_id, 1] = float(config_input[con_id][1])
+            self.rover_configs[con_id, 2] = float(config_input[con_id][2])
 
     def save_rover_training_configs(self):
         """
@@ -178,11 +157,10 @@ class RoverDomain:
         with open(pfile_name, 'a+', newline='') as csvfile:
             writer = csv.writer(csvfile)
             for con_id in range(self.n_configs):
-                for rov_id in range(self.n_rovers):
-                    row[0] = self.rover_configs[con_id, rov_id, 0]
-                    row[1] = self.rover_configs[con_id, rov_id, 1]
-                    row[2] = self.rover_configs[con_id, rov_id, 2]
-                    writer.writerow(row[:])
+                row[0] = self.rover_configs[con_id, 0]
+                row[1] = self.rover_configs[con_id, 1]
+                row[2] = self.rover_configs[con_id, 2]
+                writer.writerow(row[:])
 
     def save_rover_test_config(self):
         """
@@ -199,11 +177,10 @@ class RoverDomain:
         row = np.zeros(3)
         with open(pfile_name, 'a+', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            for rov_id in range(self.n_rovers):
-                row[0] = self.rover_configs[0, rov_id, 0]
-                row[1] = self.rover_configs[0, rov_id, 1]
-                row[2] = self.rover_configs[0, rov_id, 2]
-                writer.writerow(row[:])
+            row[0] = self.rover_configs[0, 0]
+            row[1] = self.rover_configs[0, 1]
+            row[2] = self.rover_configs[0, 2]
+            writer.writerow(row[:])
 
     def init_rover_pos_random(self, con_id):  # Randomly set rovers on map
         """
@@ -211,36 +188,32 @@ class RoverDomain:
         :param con_id: Configuration identifier number
         :return:
         """
-        for rov_id in range(self.n_rovers):
-            self.rover_configs[con_id, rov_id, 0] = random.uniform(0.0, self.world_x-1.0)
-            self.rover_configs[con_id, rov_id, 1] = random.uniform(0.0, self.world_y-1.0)
-            self.rover_configs[con_id, rov_id, 2] = random.uniform(0.0, 360.0)
+        self.rover_configs[con_id, 0] = random.uniform(0.0, self.world_x-1.0)
+        self.rover_configs[con_id, 1] = random.uniform(0.0, self.world_y-1.0)
+        self.rover_configs[con_id, 2] = random.uniform(0.0, 360.0)
 
-    def init_rover_pos_random_concentrated(self, con_id, radius=4.0):
+    def init_rover_pos_random_concentrated(self, con_id, radius=5.0):
         """
         Rovers given random starting positions within a radius of the center. Starting orientations are random.
-        :param x_lim: Outter x-limit of the environment
-        :param y-lim: Outter y-limit of the environment
         :param radius: maximum radius from the center rovers are allowed to start in
         :return:
         """
         # Origin of constraining circle
         center_x = self.world_x/2.0
-        center_y = self.world_y/2.0
+        center_y = self.world_y/2.0 + 5.0
 
-        for rov_id in range(self.n_rovers):
-            x = random.uniform(0.0, self.world_x-1.0)  # Rover X-Coordinate
-            y = random.uniform(0.0, self.world_y-1.0)  # Rover Y-Coordinate
+        x = random.uniform(0.0, self.world_x-1.0)  # Rover X-Coordinate
+        y = random.uniform(0.0, self.world_y-1.0)  # Rover Y-Coordinate
 
-            # Make sure coordinates are within the bounds of the constraining circle
-            while x > (center_x + radius) or x < (center_x - radius):
-                x = random.uniform(0.0, self.world_x-1.0)
-            while y > (center_y + radius) or y < (center_y - radius):
-                y = random.uniform(0.0, self.world_y-1.0)
+        # Make sure coordinates are within the bounds of the constraining circle
+        while x > (center_x + radius) or x < (center_x - radius):
+            x = random.uniform(0.0, self.world_x-1.0)
+        while y > (center_y + radius) or y < (center_y - radius):
+            y = random.uniform(0.0, self.world_y-1.0)
 
-            self.rover_configs[con_id, rov_id, 0] = x
-            self.rover_configs[con_id, rov_id, 1] = y
-            self.rover_configs[con_id, rov_id, 2] = random.uniform(0.0, 360.0)
+        self.rover_configs[con_id, 0] = x
+        self.rover_configs[con_id, 1] = y
+        self.rover_configs[con_id, 2] = random.uniform(0.0, 360.0)
 
     # POI POSITION FUNCTIONS ------------------------------------------------------------------------------------------
     def create_new_poi_config(self):
@@ -287,7 +260,7 @@ class RoverDomain:
             self.pois[poi_id, 1] = float(config_input[poi_id][1])
             self.pois[poi_id, 2] = float(config_input[poi_id][2])
 
-    def init_poi_pos_random(self, rovers):  # Randomly set POI on the map
+    def init_poi_pos_random(self, rov):  # Randomly set POI on the map
         """
         POI positions set randomly across the map (but not in range of any rover)
         :return:
@@ -296,25 +269,18 @@ class RoverDomain:
             x = random.uniform(0, self.world_x-1.0)
             y = random.uniform(0, self.world_y-1.0)
 
-            # rover_id = 0
-            # while rover_id < self.n_rovers:
-            #     rovx = rovers[rover_id, 0]
-            #     rovy = rovers[rover_id, 1]
-            #     xdist = x - rovx; ydist = y - rovy
-            #     distance = math.sqrt((xdist**2) + (ydist**2))
-            #
-            #     while distance < self.obs_radius:
-            #         x = random.uniform(0, self.world_x - 1.0)
-            #         y = random.uniform(0, self.world_y - 1.0)
-            #         rovx = rovers["AG{0}".format(rover_id)].rover_x
-            #         rovy = rovers["AG{0}".format(rover_id)].rover_y
-            #         xdist = x - rovx; ydist = y - rovy
-            #         distance = math.sqrt((xdist ** 2) + (ydist ** 2))
-            #
-            #         if distance > self.obs_radius:
-            #             rover_id = -1
-            #
-            #     rover_id += 1
+            rovx = rov.rover_x
+            rovy = rov.rover_y
+            xdist = x - rovx; ydist = y - rovy
+            distance = math.sqrt((xdist**2) + (ydist**2))
+
+            while distance < self.obs_radius:
+                x = random.uniform(0, self.world_x - 1.0)
+                y = random.uniform(0, self.world_y - 1.0)
+                rovx = rov.rover_x
+                rovy = rov.rover_y
+                xdist = x - rovx; ydist = y - rovy
+                distance = math.sqrt((xdist ** 2) + (ydist ** 2))
 
             self.pois[poi_id, 0] = x
             self.pois[poi_id, 1] = y
