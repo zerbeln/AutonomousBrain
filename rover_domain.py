@@ -25,6 +25,7 @@ class RoverDomain:
         # POI position and value vectors
         self.pois = np.zeros((self.n_poi, 3))  # [X, Y, Val]
         self.rover_configs = np.zeros((self.n_configs, 3))  # [X, Y, Theta]
+        self.rover_test_config = np.zeros(3)
         self.obstacles = np.zeros((self.n_obstacles, 3))  # [X, Y, Radius]
 
         # User Defined Parameters:
@@ -58,7 +59,7 @@ class RoverDomain:
             distance = math.sqrt((x_distance ** 2) + (y_distance ** 2))
 
             if distance < self.obstacles[obs_id, 2]:
-                global_reward -= 100.0
+                global_reward -= 1000.0
 
         return global_reward
 
@@ -73,7 +74,6 @@ class RoverDomain:
         """
         Update the array tracking the path of each rover
         :param rover: instance of a rover
-        :param rover_id: identifier for an individual rover
         :param step_id: Current time step for the simulation
         :return:
         """
@@ -87,8 +87,8 @@ class RoverDomain:
         Creates the rover starting configurations for testing rovers policies
         :return:
         """
-        self.rover_configs = np.zeros((1, 3))  # [X, Y, Theta]
-        self.init_rover_pos_random_concentrated(0)
+        self.rover_test_config = np.zeros(3)  # [X, Y, Theta]
+        self.init_rover_pos_random(0)
         self.save_rover_test_config()
 
     def create_rover_training_configs(self):
@@ -99,7 +99,7 @@ class RoverDomain:
         self.rover_configs = np.zeros((self.n_configs, 3))  # [X, Y, Theta]
 
         for config_id in range(self.n_configs):
-            self.init_rover_pos_random_concentrated(config_id)
+            self.init_rover_pos_random(config_id)
         self.save_rover_training_configs()
 
     def use_saved_rover_test_config(self):
@@ -117,9 +117,9 @@ class RoverDomain:
                 config_input.append(row)
 
         # Assign values to variables that track the rover's initial conditions
-        self.rover_configs[0, 0] = float(config_input[0][0])
-        self.rover_configs[0, 1] = float(config_input[0][1])
-        self.rover_configs[0, 2] = float(config_input[0][2])
+        self.rover_test_config[0] = float(config_input[0][0])
+        self.rover_test_config[1] = float(config_input[0][1])
+        self.rover_test_config[2] = float(config_input[0][2])
 
     def use_saved_rover_training_configs(self):
         """
@@ -188,9 +188,36 @@ class RoverDomain:
         :param con_id: Configuration identifier number
         :return:
         """
-        self.rover_configs[con_id, 0] = random.uniform(0.0, self.world_x-1.0)
-        self.rover_configs[con_id, 1] = random.uniform(0.0, self.world_y-1.0)
+        x = random.uniform(0.0, self.world_x - 1.0)
+        y = random.uniform(0.0, self.world_y - 1.0)
         self.rover_configs[con_id, 2] = random.uniform(0.0, 360.0)
+
+        # Make sure rover doesn't start off in range of POI or obstacle
+        count = self.n_poi + self.n_obstacles
+        while count > 0:
+            for poi_id in range(self.n_poi):
+                x_dist = self.pois[poi_id, 0] - x
+                y_dist = self.pois[poi_id, 1] - y
+                dist = math.sqrt(x_dist**2 + y_dist**2)
+
+                if dist > self.obs_radius:
+                    count -= 1
+
+            for obs_id in range(self.n_obstacles):
+                x_dist = self.obstacles[obs_id, 0] - x
+                y_dist = self.obstacles[obs_id, 1] - y
+                dist = math.sqrt(x_dist ** 2 + y_dist ** 2)
+
+                if dist > self.obstacles[obs_id, 2]:
+                    count -= 1
+
+            if count > 0:
+                x = random.uniform(0.0, self.world_x - 1.0)
+                y = random.uniform(0.0, self.world_y - 1.0)
+                count = self.n_poi + self.n_obstacles
+
+        self.rover_configs[con_id, 0] = x
+        self.rover_configs[con_id, 1] = y
 
     def init_rover_pos_random_concentrated(self, con_id, radius=5.0):
         """
@@ -200,7 +227,7 @@ class RoverDomain:
         """
         # Origin of constraining circle
         center_x = self.world_x/2.0
-        center_y = self.world_y/2.0 + 5.0
+        center_y = self.world_y/2.0
 
         x = random.uniform(0.0, self.world_x-1.0)  # Rover X-Coordinate
         y = random.uniform(0.0, self.world_y-1.0)  # Rover Y-Coordinate
@@ -222,7 +249,7 @@ class RoverDomain:
         :return: none
         """
         self.pois = np.zeros((self.n_poi, 3))
-        self.init_poi_pos_two_poi()
+        self.init_poi_pos_random()
         self.init_poi_vals_random()
         self.save_poi_configuration()
 
@@ -260,30 +287,14 @@ class RoverDomain:
             self.pois[poi_id, 1] = float(config_input[poi_id][1])
             self.pois[poi_id, 2] = float(config_input[poi_id][2])
 
-    def init_poi_pos_random(self, rov):  # Randomly set POI on the map
+    def init_poi_pos_random(self):  # Randomly set POI on the map
         """
-        POI positions set randomly across the map (but not in range of any rover)
+        POI positions set randomly across the map
         :return:
         """
         for poi_id in range(self.n_poi):
-            x = random.uniform(0, self.world_x-1.0)
-            y = random.uniform(0, self.world_y-1.0)
-
-            rovx = rov.rover_x
-            rovy = rov.rover_y
-            xdist = x - rovx; ydist = y - rovy
-            distance = math.sqrt((xdist**2) + (ydist**2))
-
-            while distance < self.obs_radius:
-                x = random.uniform(0, self.world_x - 1.0)
-                y = random.uniform(0, self.world_y - 1.0)
-                rovx = rov.rover_x
-                rovy = rov.rover_y
-                xdist = x - rovx; ydist = y - rovy
-                distance = math.sqrt((xdist ** 2) + (ydist ** 2))
-
-            self.pois[poi_id, 0] = x
-            self.pois[poi_id, 1] = y
+            self.pois[poi_id, 0] = random.uniform(0, self.world_x-1.0)
+            self.pois[poi_id, 1] = random.uniform(0, self.world_y-1.0)
 
     def init_poi_pos_circle(self):
         """
@@ -344,23 +355,15 @@ class RoverDomain:
         :return:
         """
         for poi_id in range(self.n_poi):
-            self.pois[poi_id, 2] = float(random.randint(1, 12))
+            self.pois[poi_id, 2] = float(random.randint(10, 100))
 
-    def init_poi_vals_fixed_ascending(self):
-        """
-        POI values set to fixed, ascending values based on POI ID
-        :return:
-        """
-        for poi_id in range(self.n_poi):
-            self.pois[poi_id, 2] = poi_id + 1
-
-    def init_poi_vals_fixed(self):
+    def init_poi_vals_fixed(self, val=70.0):
         """
         Set all POIs to a static, fixed value
         :return:
         """
         for poi_id in range(self.n_poi):
-            self.pois[poi_id, 2] = 1.0
+            self.pois[poi_id, 2] = val
 
     # OBSTACLE FUNCTIONS ---------------------------------------------------------------------------------------------
     def create_obstacle_configs(self):
@@ -411,6 +414,25 @@ class RoverDomain:
         :return:
         """
         for obs_id in range(self.n_obstacles):
-            self.obstacles[obs_id, 0] = random.uniform(0.0, self.world_x-1.0)
-            self.obstacles[obs_id, 1] = random.uniform(0.0, self.world_y-1.0)
-            self.obstacles[obs_id, 2] = random.randint(1, 5)
+            x = random.uniform(0.0, self.world_x-1.0)
+            y = random.uniform(0.0, self.world_y-1.0)
+            self.obstacles[obs_id, 2] = random.randint(2, 5)
+
+            # Make sure obstacle doesn't start off in range of POI
+            count = self.n_poi
+            while count > 0:
+                for poi_id in range(self.n_poi):
+                    x_dist = self.pois[poi_id, 0] - x
+                    y_dist = self.pois[poi_id, 1] - y
+                    dist = math.sqrt(x_dist ** 2 + y_dist ** 2)
+
+                    if dist > self.obs_radius:
+                        count -= 1
+
+                if count > 0:
+                    x = random.uniform(0.0, self.world_x - 1.0)
+                    y = random.uniform(0.0, self.world_y - 1.0)
+                    count = self.n_poi
+
+            self.obstacles[obs_id, 0] = x
+            self.obstacles[obs_id, 1] = y

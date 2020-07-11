@@ -48,7 +48,7 @@ def calc_global_reward(p, rover_paths, pois, obstacles, rov_id=0):
                 obstacles_hit[obs_id] = 1
 
         if obstacles_hit[obs_id] == 1:
-            global_reward -= 100
+            global_reward -= 1000
 
     return global_reward
 
