@@ -5,7 +5,9 @@ from rover_domain import RoverDomain
 from brain import Brain
 from Visualizer.visualizer import run_visualizer
 from agent import Rover
-import csv; import os; import sys
+import csv
+import os
+import sys
 import numpy as np
 import warnings
 import pickle
@@ -19,7 +21,7 @@ def get_parameters(brain_training=0):
     parameters = {}
 
     # Test Parameters
-    parameters["s_runs"] = 10
+    parameters["s_runs"] = 1
     parameters["running"] = 0  # 1 keeps visualizer from closing (use 0 for multiple runs)
     parameters["train_policies"] = 1  # 1 = train new set, 0 = re-use trained set
 
@@ -56,7 +58,7 @@ def get_parameters(brain_training=0):
     parameters["m_rate"] = 0.1
     parameters["m_prob"] = 0.3
     parameters["epsilon"] = 0.1
-    parameters["generations"] = 500
+    parameters["generations"] = 600
     parameters["n_elites"] = 5
 
     return parameters
@@ -218,7 +220,7 @@ def train_away_from_poi_policy(poi_id):
                     rd.update_rover_path(rov, step_id)
 
                     # Update fitness of policies using reward information
-                    ea.fitness[policy_id] += go_away_poi_reward(poi_id, rd.pois, rov)
+                    ea.fitness[policy_id] += go_away_poi_reward(rd.pois[poi_id], rov)
             ea.fitness[policy_id] /= p["n_configs"]
 
         # Choose new parents and create new offspring population
@@ -261,7 +263,7 @@ def train_towards_poi_policy(poi_id):
                     rd.update_rover_path(rov, step_id)
 
                     # Update fitness of policies using reward information
-                    ea.fitness[policy_id] += go_towards_poi_reward(poi_id, rd.pois, rov)
+                    ea.fitness[policy_id] += go_towards_poi_reward(rd.pois[poi_id], rov)
             ea.fitness[policy_id] /= p["n_configs"]
 
         # Choose new parents and create new offspring population
@@ -443,7 +445,7 @@ def main(reward_type="Visual"):
     if reward_type == "Multi":
         multi_reward_learning_single()
     elif reward_type == "Train":
-        policies = train_policies()
+        train_policies()
     elif reward_type == "Test":
         test_policy(1, "avoid")  # [Policy ID, Policy Type]
     elif reward_type == "Visual":

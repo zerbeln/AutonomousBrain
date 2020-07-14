@@ -34,11 +34,11 @@ class RoverDomain:
     def step_based_global_reward(self, rov):
         """
         Calculates the global reward at each time step
-        :param rover_positions:
+        :param rov:
         :return:
         """
 
-        global_reward = -1.0  # Step cost
+        global_reward = 0.0  # Step cost
 
         for poi_id in range(self.n_poi):
             # Calculate distance between agent and POI
@@ -60,6 +60,9 @@ class RoverDomain:
 
             if distance < self.obstacles[obs_id, 2]:
                 global_reward -= 1000.0
+
+        if global_reward == 0.0:
+            global_reward = -1.0
 
         return global_reward
 

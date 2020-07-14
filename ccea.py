@@ -53,8 +53,6 @@ class Ccea:
         :return:
         """
 
-        # pre_mutated_pop = copy.deepcopy(self.population)
-
         pop_id = int(self.n_elites)
         while pop_id < self.pop_size:
             mut_counter = 0
@@ -93,27 +91,8 @@ class Ccea:
                     weight = self.population["pop{0}".format(pop_id)]["b2"][w]
                     mutation = (np.random.normal(0, self.mut_rate)) * weight
                     self.population["pop{0}".format(pop_id)]["b2"][w] += mutation
+
             pop_id += 1
-
-        # Check pop before and after mutation to make sure mutation worked
-        # identical_counter = 0
-        # for pop_id in range(self.pop_size):
-        #     popA = copy.deepcopy(self.population["pop{0}".format(pop_id)])
-        #     popB = pre_mutated_pop["pop{0}".format(pop_id)]
-        #     identical_counter += self.population_checker(popA, popB)
-        # assert(identical_counter < self.pop_size)
-
-        # After mutation any 2 populations should not be the same
-        # for pop_id1 in range(self.pop_size-1):
-        #     hom_counter = 0
-        #     pop_id2 = pop_id1 + 1
-        #     while pop_id2 < self.pop_size:
-        #         assert(pop_id1 != pop_id2)
-        #         pop1 = copy.deepcopy(self.population["pop{0}".format(pop_id1)])
-        #         pop2 = copy.deepcopy(self.population["pop{0}".format(pop_id2)])
-        #         hom_counter += self.population_checker(pop1, pop2)
-        #         pop_id2 += 1
-            # assert(hom_counter < self.n_elites)
 
     def population_checker(self, pop1, pop2):
         matrix_count = 0
@@ -182,42 +161,39 @@ class Ccea:
         Choose next generation of policies using fitness proportional selection
         :return:
         """
-        summed_fitness = np.sum(self.fitness)
+        fitness_offset = min(self.fitness) - 10
+        summed_fit = np.sum(np.absolute(self.fitness))
         fit_brackets = np.zeros(self.pop_size)
 
         # Calculate fitness proportions for selections
         for pop_id in range(self.pop_size):
             if pop_id == 0:
-                fit_brackets[pop_id] = self.fitness[pop_id] / summed_fitness
+                fit_brackets[pop_id] = (self.fitness[pop_id] + fitness_offset) / summed_fit
             else:
-                fit_brackets[pop_id] = fit_brackets[pop_id - 1] + self.fitness[pop_id] / summed_fitness
-        new_population = {}
+                fit_brackets[pop_id] = (fit_brackets[pop_id - 1] + self.fitness[pop_id] + fitness_offset) / summed_fit
 
+        new_population = {}
         for pop_id in range(self.pop_size):
             if pop_id < self.n_elites:
-                print(pop_id)
-                new_population["pop{0}".format(pop_id)] = self.population["pop{0}".format(pop_id)].copy()
+                new_population["pop{0}".format(pop_id)] = copy.deepcopy(self.population["pop{0}".format(pop_id)])
             else:
                 rnum = random.uniform(0, 1)
                 for p_id in range(self.pop_size):
                     if p_id == 0 and rnum < fit_brackets[0]:
-                        print(pop_id)
-                        new_population["pop{0}".format(pop_id)] = self.population["pop{0}".format(0)].copy()
+                        new_population["pop{0}".format(pop_id)] = copy.deepcopy(self.population["pop{0}".format(0)])
                         break
                     elif fit_brackets[p_id - 1] <= rnum < fit_brackets[p_id]:
-                        print(pop_id)
-                        new_population["pop{0}".format(pop_id)] = self.population["pop{0}".format(p_id)].copy()
+                        new_population["pop{0}".format(pop_id)] = copy.deepcopy(self.population["pop{0}".format(p_id)])
                         break
 
         self.population = {}
-        self.population = new_population.copy()
+        self.population = copy.deepcopy(new_population)
 
     def rank_population(self):
         """
         Reorders the population in terms of fitness (high to low)
         :return:
         """
-
         ranked_population = copy.deepcopy(self.population)
         for pop_id_a in range(self.pop_size):
             pop_id_b = pop_id_a + 1
@@ -237,7 +213,6 @@ class Ccea:
         Select parents create offspring population, and perform mutation operations
         :return: None
         """
-
         self.rank_population()
         self.epsilon_greedy_select()  # Select K successors using epsilon greedy
         # self.fitness_prop_selection()  # Select k successors using fit prop selection

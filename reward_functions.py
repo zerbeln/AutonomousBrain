@@ -1,8 +1,9 @@
 import numpy as np
 import math
 
+
 # GLOBAL REWARD -------------------------------------------------------------------------------------------------------
-def calc_global_reward(p, rover_paths, pois, obstacles, rov_id=0):
+def calc_global_reward(p, rover_paths, pois, obstacles):
     """
     Calculate the global reward for the entire rover trajectory
     :param p: instance of parameters class being passed from main
@@ -12,7 +13,6 @@ def calc_global_reward(p, rover_paths, pois, obstacles, rov_id=0):
     """
 
     total_steps = int(p["n_steps"] + 1)  # The +1 is to account for the initial position
-    inft = 1000.00
     global_reward = 0
 
     poi_observed = np.zeros(p["n_poi"])
@@ -48,7 +48,7 @@ def calc_global_reward(p, rover_paths, pois, obstacles, rov_id=0):
                 obstacles_hit[obs_id] = 1
 
         if obstacles_hit[obs_id] == 1:
-            global_reward -= 1000
+            global_reward -= 1000.0
 
     return global_reward
 

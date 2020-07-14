@@ -1,35 +1,32 @@
-import numpy as np
 import math
 
 
-def go_towards_poi_reward(poi_id, pois, rover):
+def go_towards_poi_reward(poi_pos, rover):
     """
     Rover receives a reward encouraging it to move closer to a particular POI
-    :param poi_id:
-    :param pois:
+    :param poi_pos:
     :param rover:
     :return:
     """
-    x_dist = pois[poi_id, 0] - rover.rover_x
-    y_dist = pois[poi_id, 1] - rover.rover_y
-    dist = x_dist**2 + y_dist**2
+    x_dist = poi_pos[0] - rover.rover_x
+    y_dist = poi_pos[1] - rover.rover_y
+    dist = math.sqrt(x_dist**2 + y_dist**2)
 
     reward = -dist
 
     return reward
 
 
-def go_away_poi_reward(poi_id, pois, rover):
+def go_away_poi_reward(poi_pos, rover):
     """
     Rover receives a reward encouraging it to move further away from a particular POI
-    :param poi_id:
-    :param pois:
+    :param poi_pos:
     :param rover:
     :return:
     """
-    x_dist = pois[poi_id, 0] - rover.rover_x
-    y_dist = pois[poi_id, 1] - rover.rover_y
-    dist = x_dist**2 + y_dist**2
+    x_dist = poi_pos[0] - rover.rover_x
+    y_dist = poi_pos[1] - rover.rover_y
+    dist = math.sqrt(x_dist**2 + y_dist**2)
 
     reward = dist
 
@@ -46,7 +43,7 @@ def avoid_obstacle_reward(obs_id, obstacles, rover):
     """
     x_dist = obstacles[obs_id, 0] - rover.rover_x
     y_dist = obstacles[obs_id, 1] - rover.rover_y
-    dist = x_dist**2 + y_dist**2
+    dist = math.sqrt(x_dist**2 + y_dist**2)
 
     reward = dist
 

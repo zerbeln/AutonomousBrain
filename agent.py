@@ -69,10 +69,8 @@ class Rover:
         if math.isnan(theta):
             theta = 0.0
 
-        # Update rover position if rover is within bounds
-        if 0.0 <= x < x_lim and 0.0 <= y < y_lim:
-            self.rover_x = x
-            self.rover_y = y
+        self.rover_x = x
+        self.rover_y = y
         self.rover_theta = theta
 
     def run_rover_scan(self, rovers, n_rovers):
