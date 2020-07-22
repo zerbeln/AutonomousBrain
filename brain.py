@@ -1,11 +1,12 @@
 import numpy as np
+from parameters import brain_inputs, brain_outputs, brain_hnodes
 
 
 class Brain:
-    def __init__(self, p):
-        self.n_inputs = p["brain_inputs"]
-        self.n_outputs = p["brain_outputs"]
-        self.n_hnodes = p["brain_hnodes"]  # Number of nodes in hidden layer
+    def __init__(self):
+        self.n_inputs = brain_inputs
+        self.n_outputs = brain_outputs
+        self.n_hnodes = brain_hnodes  # Number of nodes in hidden layer
 
         self.weights = {}
         self.input_layer = np.reshape(np.mat(np.zeros(self.n_inputs)), [self.n_inputs, 1])

@@ -1,22 +1,22 @@
 import numpy as np
 import math
 import sys
-
+from parameters import obs_rad, n_inputs, n_outputs, n_steps, angle_resolution, sensor_type, n_hnodes
 
 class Rover:
-    def __init__(self, p, rov_id):
-        self.sensor_range = p["obs_rad"]
-        self.min_dist = p["min_dist"]
-        self.sensor_readings = np.zeros(p["n_inputs"])
+    def __init__(self, rov_id):
+        self.sensor_range = obs_rad
+        self.min_dist = 1.0
+        self.sensor_readings = np.zeros(n_inputs)
         self.self_id = rov_id  # Rover unique identifier
-        self.max_steps = p["n_steps"]
-        self.angle_res = p["angle_resolution"]
-        self.sensor_type = p["sensor_type"]
+        self.max_steps = n_steps
+        self.angle_res = angle_resolution
+        self.sensor_type = sensor_type
 
         # Agent Neuro-Controller Parameters
-        self.n_inputs = p["n_inputs"]
-        self.n_outputs = p["n_outputs"]
-        self.n_hnodes = p["n_hnodes"]  # Number of nodes in hidden layer
+        self.n_inputs = n_inputs
+        self.n_outputs = n_outputs
+        self.n_hnodes = n_hnodes  # Number of nodes in hidden layer
         self.weights = {}
         self.input_layer = np.reshape(np.mat(np.zeros(self.n_inputs)), [self.n_inputs, 1])
         self.hidden_layer = np.reshape(np.mat(np.zeros(self.n_hnodes)), [self.n_hnodes, 1])

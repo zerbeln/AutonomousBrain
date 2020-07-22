@@ -3,21 +3,22 @@ import math
 import random
 import os
 import csv
+from parameters import x_dim, y_dim, n_poi, c_req, min_dist, n_steps, n_configs, n_obstacles, obs_rad
 
 
 class RoverDomain:
 
-    def __init__(self, p):
+    def __init__(self):
         # World attributes
-        self.world_x = p["x_dim"]
-        self.world_y = p["y_dim"]
-        self.n_poi = p["n_poi"]
-        self.c_req = p["c_req"]
-        self.min_dist = p["min_dist"]
-        self.obs_radius = p["obs_rad"]
-        self.rover_steps = p["n_steps"]
-        self.n_configs = p["n_configs"]
-        self.n_obstacles = p["n_obstacles"]
+        self.world_x = x_dim
+        self.world_y = y_dim
+        self.n_poi = n_poi
+        self.c_req = c_req
+        self.min_dist = min_dist
+        self.obs_radius = obs_rad
+        self.rover_steps = n_steps
+        self.n_configs = n_configs
+        self.n_obstacles = n_obstacles
 
         # Rover path trace for trajectory-wide global reward computation and vizualization purposes
         self.rover_path = np.zeros(((self.rover_steps + 1), 3))

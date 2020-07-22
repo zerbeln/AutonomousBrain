@@ -1,9 +1,10 @@
 import numpy as np
 import math
+from parameters import n_steps, n_poi, min_dist, obs_rad, n_obstacles
 
 
 # GLOBAL REWARD -------------------------------------------------------------------------------------------------------
-def calc_global_reward(p, rover_paths, pois, obstacles):
+def calc_global_reward(rover_paths, pois, obstacles):
     """
     Calculate the global reward for the entire rover trajectory
     :param p: instance of parameters class being passed from main
@@ -12,33 +13,33 @@ def calc_global_reward(p, rover_paths, pois, obstacles):
     :return: global_reward
     """
 
-    total_steps = int(p["n_steps"] + 1)  # The +1 is to account for the initial position
+    total_steps = int(n_steps + 1)  # The +1 is to account for the initial position
     global_reward = 0
 
-    poi_observed = np.zeros(p["n_poi"])
+    poi_observed = np.zeros(n_poi)
     rover_distances = np.zeros(total_steps)
 
-    for poi_id in range(p["n_poi"]):
+    for poi_id in range(n_poi):
         for step_id in range(total_steps):
             # Calculate distance between agent and POI
             x_distance = pois[poi_id, 0] - rover_paths[step_id, 0]
             y_distance = pois[poi_id, 1] - rover_paths[step_id, 1]
             distance = math.sqrt((x_distance**2) + (y_distance**2))
 
-            if distance < p["min_dist"]:
-                distance = p["min_dist"]
+            if distance < min_dist:
+                distance = min_dist
 
             rover_distances[step_id] = distance
 
             # Check if agent observes poi and update observer count if true
-            if distance < p["obs_rad"]:
+            if distance < obs_rad:
                 poi_observed[poi_id] = 1
 
         if poi_observed[poi_id] == 1:
             global_reward += pois[poi_id, 2] / min(rover_distances)
 
-    obstacles_hit = np.zeros(p["n_obstacles"])
-    for obs_id in range(p["n_obstacles"]):
+    obstacles_hit = np.zeros(n_obstacles)
+    for obs_id in range(n_obstacles):
         for step_id in range(total_steps):
             x_distance = obstacles[obs_id, 0] - rover_paths[step_id, 0]
             y_distance = obstacles[obs_id, 1] - rover_paths[step_id, 1]

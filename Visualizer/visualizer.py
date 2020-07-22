@@ -5,6 +5,7 @@ import math
 import os
 import csv
 import pickle
+from parameters import n_poi, n_obstacles, s_runs, n_steps, x_dim, y_dim, obs_rad, vis_running
 
 pygame.font.init()  # you have to call this at the start, if you want to use this module
 myfont = pygame.font.SysFont('Comic Sans MS', 30)
@@ -38,13 +39,12 @@ def import_rover_paths():
     return rover_paths
 
 
-def import_poi_information(p):
+def import_poi_information():
     """
     Import POI information from saved configuration files
-    :param p:
     :return:
     """
-    pois = np.zeros((p["n_poi"], 3))
+    pois = np.zeros((n_poi, 3))
 
     config_input = []
     with open('./Output_Data/POI_Config.csv') as csvfile:
@@ -53,7 +53,7 @@ def import_poi_information(p):
         for row in csv_reader:
             config_input.append(row)
 
-    for poi_id in range(p["n_poi"]):
+    for poi_id in range(n_poi):
         pois[poi_id, 0] = float(config_input[poi_id][0])
         pois[poi_id, 1] = float(config_input[poi_id][1])
         pois[poi_id, 2] = float(config_input[poi_id][2])
@@ -61,13 +61,12 @@ def import_poi_information(p):
     return pois
 
 
-def import_obstacle_information(p):
+def import_obstacle_information():
     """
     Import obstacle information from saved config files
-    :param p:
     :return:
     """
-    obstacles = np.zeros((p["n_obstacles"], 3))
+    obstacles = np.zeros((n_obstacles, 3))
 
     config_input = []
     with open('./Output_Data/Obs_Config.csv') as csvfile:
@@ -76,7 +75,7 @@ def import_obstacle_information(p):
         for row in csv_reader:
             config_input.append(row)
 
-    for obs_id in range(p["n_obstacles"]):
+    for obs_id in range(n_obstacles):
         obstacles[obs_id, 0] = float(config_input[obs_id][0])
         obstacles[obs_id, 1] = float(config_input[obs_id][1])
         obstacles[obs_id, 2] = float(config_input[obs_id][2])
@@ -84,16 +83,15 @@ def import_obstacle_information(p):
     return obstacles
 
 
-def run_visualizer(p):
+def run_visualizer():
     """
     Run the visualzier that plots each rover's trajectory in the domain
-    :param p:
     :return:
     """
     scale_factor = 20  # Scaling factor for images
     width = -15  # robot icon widths
-    x_map = int(p["x_dim"] + 10)  # Slightly larger so POI are not cut off
-    y_map = int(p["y_dim"] + 10)
+    x_map = int(x_dim + 10)  # Slightly larger so POI are not cut off
+    y_map = int(y_dim + 10)
     image_adjust = 100  # Adjusts the image so that everything is centered
     pygame.init()
     pygame.display.set_caption('Rover Domain')
@@ -104,45 +102,41 @@ def run_visualizer(p):
     myfont = pygame.font.SysFont('Comic Sans MS', 30)
 
     rover_path = import_rover_paths()
-    pois = import_poi_information(p)
-    obstacles = import_obstacle_information(p)
+    pois = import_poi_information()
+    obstacles = import_obstacle_information()
 
-    poi_convergence = [0 for i in range(p["n_poi"] + 1)]
-    for srun in range(p["s_runs"]):
+    poi_convergence = [0 for i in range(n_poi + 1)]
+    for srun in range(s_runs):
         game_display = pygame.display.set_mode((x_map * scale_factor, y_map * scale_factor))
-        poi_status = [False for _ in range(p["n_poi"])]
-        for tstep in range(p["n_steps"]):
+        poi_status = [False for _ in range(n_poi)]
+        for tstep in range(n_steps):
 
             # Draw POI and calculate POI observations
             draw(game_display, background, 0, 0)
-            for poi_id in range(p["n_poi"]):  # Draw POI and POI values
+            for poi_id in range(n_poi):  # Draw POI and POI values
                 poi_x = int(pois[poi_id, 0] * scale_factor) + image_adjust
                 poi_y = int(pois[poi_id, 1] * scale_factor) + image_adjust
 
-                observer_count = 0
                 x_dist = pois[poi_id, 0] - rover_path[srun, tstep, 0]
                 y_dist = pois[poi_id, 1] - rover_path[srun, tstep, 1]
                 dist = math.sqrt((x_dist**2) + (y_dist**2))
 
-                if dist <= p["obs_rad"]:
-                    observer_count += 1
-
-                if observer_count >= p["c_req"]:
+                if dist <= obs_rad:
                     poi_status[poi_id] = True
 
                 if poi_status[poi_id]:
                     pygame.draw.circle(game_display, (50, 205, 50), (poi_x, poi_y), 10)
-                    pygame.draw.circle(game_display, (0, 0, 0), (poi_x, poi_y), int(p["obs_rad"] * scale_factor), 1)
+                    pygame.draw.circle(game_display, (0, 0, 0), (poi_x, poi_y), int(obs_rad * scale_factor), 1)
                 else:
                     pygame.draw.circle(game_display, (220, 20, 60), (poi_x, poi_y), 10)
-                    pygame.draw.circle(game_display, (0, 0, 0), (poi_x, poi_y), int(p["obs_rad"] * scale_factor), 1)
+                    pygame.draw.circle(game_display, (0, 0, 0), (poi_x, poi_y), int(obs_rad * scale_factor), 1)
                 textsurface = myfont.render(str(pois[poi_id, 2]), False, (0, 0, 0))
                 target_x = int(pois[poi_id, 0]*scale_factor) + image_adjust
                 target_y = int(pois[poi_id, 1]*scale_factor) + image_adjust
                 draw(game_display, textsurface, target_x, target_y)
 
             # Draw Obstacle
-            for obs_id in range(p["n_obstacles"]):
+            for obs_id in range(n_obstacles):
                 obs_x = int(obstacles[obs_id, 0] * scale_factor) + image_adjust
                 obs_y = int(obstacles[obs_id, 1] * scale_factor) + image_adjust
                 obs_zone = int(obstacles[obs_id, 2] * scale_factor)
@@ -172,12 +166,12 @@ def run_visualizer(p):
             time.sleep(0.1)
 
         counter = 0
-        for poi_id in range(p["n_poi"]):
+        for poi_id in range(n_poi):
             if poi_status[poi_id]:
                 poi_convergence[poi_id] += 1
                 counter += 1
         if counter == 0:
-            poi_convergence[p["n_poi"]] += 1
+            poi_convergence[n_poi] += 1
 
         dir_name = 'Screenshots/'  # Intended directory for output files
         if not os.path.exists(dir_name):  # If Data directory does not exist, create it
@@ -186,7 +180,7 @@ def run_visualizer(p):
         screenshot_filename = os.path.join(dir_name, image_name)
 
         pygame.image.save(game_display, screenshot_filename)
-        while p["running"]:
+        while vis_running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    p["running"] = False
+                    vis_running = False

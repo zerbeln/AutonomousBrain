@@ -1,18 +1,19 @@
 import numpy as np
 import random
 import copy
+from parameters import population_size, mutation_rate, mutation_prob, epsilon, num_elites
 
 
 class Ccea:
-    def __init__(self, p, n_inp, n_hid, n_out):
+    def __init__(self, n_inp, n_hid, n_out):
         self.population = {}
-        self.fitness = np.zeros(p["pop_size"])
-        self.pop_size = p["pop_size"]
-        self.mut_rate = p["m_rate"]
-        self.mut_chance = p["m_prob"]
-        self.eps = p["epsilon"]
+        self.fitness = np.zeros(population_size)
+        self.pop_size = population_size
+        self.mut_rate = mutation_rate
+        self.mut_chance = mutation_prob
+        self.eps = epsilon
         self.fitness = np.zeros(self.pop_size)
-        self.n_elites = p["n_elites"]  # Number of elites selected from each gen
+        self.n_elites = num_elites  # Number of elites selected from each gen
         self.team_selection = np.ones(self.pop_size) * (-1)
 
         # Network Parameters that determine the number of weights to evolve
